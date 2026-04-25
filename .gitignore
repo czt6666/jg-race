@@ -1,0 +1,31 @@
+# Vendor / large upstream tree (install separately: pip install -e ./JittorGeometric)
+JittorGeometric/
+result/
+result.zip
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual env
+.venv/
+venv/
+
+# Jittor compile cache (local)
+.jittor/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
