@@ -3,7 +3,11 @@
 ## 1.1 运行命令
 
 ```bash
-python main.py --dataset <数据集名称>
+conda activate rtdetr_env
+python main.py --dataset dataset1
+
+dataset1：Best AP: 0.975149
+dataset2：Best AP: 0.935858
 ```
 
 支持的数据集：`dataset1`、`dataset2`

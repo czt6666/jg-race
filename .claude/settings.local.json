@@ -4,7 +4,8 @@
       "Bash(git commit *)",
       "Bash(git filter-repo *)",
       "Bash(python -m git_filter_repo --version)",
-      "Bash(git --version)"
+      "Bash(git --version)",
+      "Bash(python *)"
     ]
   }
 }
