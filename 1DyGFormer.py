@@ -153,25 +153,28 @@ def train(model, optimizer, criterion, train_loader, val_loader,
     return best_ap
 
 
-# Test inference, parallel across ranks. Each rank scores the strided subset of
-# query indices [RANK::WORLD_SIZE] and fills those rows in a zero-initialized
-# (n, 100) matrix. A single mpi_all_reduce('add') then sums across ranks to
-# recover the full result on every rank (each rank's matrix is zero outside
-# its own rows, so sum is exact). Avoids any temp-file gathering.
-def test_competition(model, test_src, test_time, test_candidates, batch_size=25):
+# Test inference, parallel across ranks. Each rank scores its strided slice of
+# queries [RANK::WORLD_SIZE], saves its (idx, scores) to a per-rank .npz, then
+# rank 0 reads all four files and stitches them back into the full (n, 100) array.
+#
+# Why files instead of mpi_all_reduce: the score matrix is ~24MB. On a non-CUDA-
+# aware OpenMPI, all-reducing a GPU Var of that size is brittle (can hang). File
+# gather is unconditional and doesn't care about MPI build flavor.
+def test_competition(model, test_src, test_time, test_candidates,
+                      tmp_dir, dataset_name, batch_size=25):
     model.eval()
     backbone, predictor = model[0], model[1]
     n = len(test_src)
     num_cands = test_candidates.shape[1]
 
-    # Strided slice of query indices owned by this rank
     my_idx = np.arange(RANK, n, WORLD_SIZE, dtype=np.int64) if IS_MPI else np.arange(n, dtype=np.int64)
     my_n = len(my_idx)
     my_n_batches = (my_n + batch_size - 1) // batch_size
+    my_scores = np.zeros((my_n, num_cands), dtype=np.float32)
 
-    full_scores = np.zeros((n, num_cands), dtype=np.float32)
-
-    pbar = tqdm(range(my_n_batches), ncols=120, desc=f'Testing[r{RANK}]', disable=not IS_MAIN)
+    # Show progress on EVERY rank (with rank tag) so we can spot stragglers.
+    pbar = tqdm(range(my_n_batches), ncols=120,
+                desc=f'Testing[r{RANK}]', position=RANK)
     for batch_idx in pbar:
         start = batch_idx * batch_size
         end = min((batch_idx + 1) * batch_size, my_n)
@@ -186,13 +189,29 @@ def test_competition(model, test_src, test_time, test_candidates, batch_size=25)
             src_node_ids=src_rep, dst_node_ids=cand_flat, node_interact_times=t_rep)
         logit = predictor(src_emb, dst_emb).squeeze(-1)
         probs = jt.sigmoid(logit).numpy().reshape(b, num_cands).astype(np.float32)
-        full_scores[idx_chunk] = probs
+        my_scores[start:end] = probs
 
-    # Aggregate: each rank holds non-zero only on its strided rows; sum recovers full.
-    if IS_MPI:
-        full_scores = jt.array(full_scores).mpi_all_reduce('add').numpy()
+    # Single-GPU fast path
+    if not IS_MPI:
+        full = np.zeros((n, num_cands), dtype=np.float32)
+        full[my_idx] = my_scores
+        return full
 
-    return full_scores
+    # Multi-rank: each rank dumps its slice; tiny all_reduce as barrier; rank 0 merges.
+    tmp_path = f'{tmp_dir}/_tmp_{dataset_name}_rank{RANK}.npz'
+    np.savez(tmp_path, idx=my_idx, scores=my_scores)
+    jt.array([0], dtype='int32').mpi_all_reduce('add')  # barrier
+
+    if not IS_MAIN:
+        return None  # only rank 0 returns the merged result; others skip CSV write
+
+    full = np.zeros((n, num_cands), dtype=np.float32)
+    for r in range(WORLD_SIZE):
+        p = f'{tmp_dir}/_tmp_{dataset_name}_rank{r}.npz'
+        d = np.load(p)
+        full[d['idx']] = d['scores']
+        os.remove(p)
+    return full
 
 
 # Main
@@ -342,8 +361,13 @@ best_ap = train(model, optimizer, criterion, train_loader, val_loader,
                 args.epochs, save_path, args.dataset, args.early_stop)
 
 # All ranks load the best model from disk and run the parallel test_competition.
-# The previous epoch's final mpi_all_reduce inside test_val acts as a barrier, so
-# rank-0's jt.save has flushed by the time we reach this load on any rank.
+# Explicit barrier: rank 0's last jt.save in the train loop happens AFTER the
+# epoch's mpi_all_reduce in test_val, so we need a fresh barrier here before
+# any rank tries to read those files (otherwise --epochs 1 races and rank 1/2/3
+# see partial state on disk).
+if IS_MPI:
+    jt.array([0], dtype='int32').mpi_all_reduce('add')
+
 log('\nGenerating predictions using best model...')
 best_model_path = f'{save_path}/{args.dataset}_DyGFormer_best.pkl'
 latest_model_path = f'{save_path}/{args.dataset}_DyGFormer.pkl'
@@ -354,12 +378,12 @@ else:
     model.load_state_dict(jt.load(latest_model_path))
     log(f'Best model not found, using latest model')
 
-# Parallel test inference: each rank scores its strided slice, then mpi_all_reduce
-# yields the full (n, 100) score matrix on every rank.
-scores = test_competition(model, test_src, test_time, test_candidates, args.test_batch_size)
+# Parallel test inference: each rank scores its strided slice, dumps a .npz to
+# save_path, barrier, rank 0 merges. Returns the full score matrix on rank 0
+# only; other ranks return None and skip the CSV write.
+scores = test_competition(model, test_src, test_time, test_candidates,
+                           save_path, args.dataset, args.test_batch_size)
 
-# Only rank 0 writes the CSV (file is now identical across ranks but we don't
-# want 4 processes racing on the same path).
 if IS_MAIN:
     log(f'Scores shape: {scores.shape}, range: [{scores.min():.6f}, {scores.max():.6f}]')
     output_file = f'{args.output_dir}/{args.dataset}/{args.dataset}_result.csv'
