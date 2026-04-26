@@ -5,7 +5,14 @@
       "Bash(git filter-repo *)",
       "Bash(python -m git_filter_repo --version)",
       "Bash(git --version)",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Bash(curl -s \"https://cg.cs.tsinghua.edu.cn/jittor/assets/docs/\" -o /tmp/jittor_docs_index.html)",
+      "Bash(curl -s \"https://cg.cs.tsinghua.edu.cn/jittor/assets/docs/jittor.mpi.html\" -o /tmp/jittor_mpi.html)",
+      "Bash(python3 /tmp/strip_html.py /tmp/jittor_mpi.html)",
+      "Bash(python3 *)",
+      "Bash(cat)",
+      "Bash(python3 /tmp/strip.py /tmp/jittor_mpi.html)",
+      "Bash(PYTHONIOENCODING=utf-8 python3 /tmp/strip.py /tmp/jittor_mpi.html)"
     ]
   }
 }

@@ -23,14 +23,32 @@ import argparse
 
 jt.flags.use_cuda = 1
 
+# MPI / multi-GPU helpers. When launched via `mpirun -np N python 1DyGFormer.py ...`,
+# jt.in_mpi == True and jt.rank/jt.world_size are populated. Otherwise we run single-GPU.
+IS_MPI = jt.in_mpi
+RANK = jt.rank if IS_MPI else 0
+WORLD_SIZE = jt.world_size if IS_MPI else 1
+IS_MAIN = (RANK == 0)
 
-# Used for validation
+
+def log(msg):
+    """Only rank 0 prints, to avoid 4x duplicated logs."""
+    if IS_MAIN:
+        print(msg)
+
+
+# Validation: each rank iterates its sharded slice of val_loader, then we
+# aggregate scalar metrics across ranks via mpi_all_reduce so every rank
+# returns the same global numbers (early-stop decision stays in sync).
 def test_val(model, loader):
     model.eval()
     backbone, predictor = model[0], model[1]
     mrr_eval = MRR_Evaluator()
-    ap_list, auc_list, mrr_list = [], [], []
-    loader_tqdm = tqdm(loader, ncols=120, desc='Validation')
+
+    ap_sum, auc_sum, n_batches = 0.0, 0.0, 0
+    mrr_sum, mrr_count = 0.0, 0
+
+    loader_tqdm = tqdm(loader, ncols=120, desc='Validation', disable=not IS_MAIN)
     for _, batch_data in enumerate(loader_tqdm):
         src = np.array(batch_data.src).astype(np.int32)
         dst = np.array(batch_data.dst).astype(np.int32)
@@ -51,11 +69,24 @@ def test_val(model, loader):
 
         y_true = np.concatenate([np.ones_like(pos_score), np.zeros_like(neg_score)])
         y_score = np.concatenate([pos_score, neg_score])
-        ap_list.append(average_precision_score(y_true, y_score))
-        auc_list.append(roc_auc_score(y_true, y_score))
-        mrr_list.extend(mrr_eval.eval(pos_score, neg_score))
+        ap_sum += float(average_precision_score(y_true, y_score))
+        auc_sum += float(roc_auc_score(y_true, y_score))
+        n_batches += 1
 
-    return {'AP': np.mean(ap_list), 'AUC': np.mean(auc_list), 'MRR': np.mean(mrr_list)}
+        batch_mrr = mrr_eval.eval(pos_score, neg_score)
+        mrr_sum += float(np.sum(batch_mrr))
+        mrr_count += len(batch_mrr)
+
+    # Aggregate scalars across ranks. Pack into one Var, single all-reduce.
+    if IS_MPI:
+        agg = jt.array(
+            [ap_sum, auc_sum, mrr_sum, float(n_batches), float(mrr_count)],
+            dtype='float32').mpi_all_reduce('add')
+        ap_sum, auc_sum, mrr_sum, n_batches, mrr_count = agg.numpy().tolist()
+
+    if n_batches == 0 or mrr_count == 0:
+        return {'AP': 0.0, 'AUC': 0.0, 'MRR': 0.0}
+    return {'AP': ap_sum / n_batches, 'AUC': auc_sum / n_batches, 'MRR': mrr_sum / mrr_count}
 
 
 def train(model, optimizer, criterion, train_loader, val_loader,
@@ -67,7 +98,7 @@ def train(model, optimizer, criterion, train_loader, val_loader,
         model.train()
         backbone, predictor = model[0], model[1]
         train_losses = []
-        train_tqdm = tqdm(train_loader, ncols=120, desc=f'Epoch {epoch + 1}')
+        train_tqdm = tqdm(train_loader, ncols=120, desc=f'Epoch {epoch + 1}', disable=not IS_MAIN)
 
         for batch_idx, batch_data in enumerate(train_tqdm):
             src = np.array(batch_data.src).astype(np.int32)
@@ -94,63 +125,74 @@ def train(model, optimizer, criterion, train_loader, val_loader,
             train_losses.append(loss.item())
             train_tqdm.set_description(f'Epoch {epoch + 1}, loss: {loss.item():.4f}')
 
-        print(f'Epoch {epoch + 1}, Train Loss: {np.mean(train_losses):.4f}')
-        val_res = test_val(model, val_loader)
-        print(f'Epoch {epoch + 1}, Val: {val_res}')
+        log(f'Epoch {epoch + 1}, Train Loss (rank0 shard): {np.mean(train_losses):.4f}')
+        val_res = test_val(model, val_loader)  # identical across ranks after all-reduce
+        log(f'Epoch {epoch + 1}, Val: {val_res}')
 
-        # Early stopping check (use AP, matches main.py)
+        # All ranks compute the same decision (val_res is globally identical).
+        # File IO is rank-0 only; jt.save does no MPI ops so it's safe inside the guard.
         current_ap = val_res['AP']
         if current_ap > best_ap:
             best_ap = current_ap
             patience_counter = 0
-            jt.save(model.state_dict(), f'{save_path}/{dataset_name}_DyGFormer_best.pkl')
-            print(f'  -> New best AP: {best_ap:.6f}, model saved!')
+            if IS_MAIN:
+                jt.save(model.state_dict(), f'{save_path}/{dataset_name}_DyGFormer_best.pkl')
+            log(f'  -> New best AP: {best_ap:.6f}, model saved!')
         else:
             patience_counter += 1
-            print(f'  -> No improvement for {patience_counter} epoch(s), best AP: {best_ap:.6f}')
+            log(f'  -> No improvement for {patience_counter} epoch(s), best AP: {best_ap:.6f}')
 
-        # Also save latest model
-        jt.save(model.state_dict(), f'{save_path}/{dataset_name}_DyGFormer.pkl')
+        if IS_MAIN:
+            jt.save(model.state_dict(), f'{save_path}/{dataset_name}_DyGFormer.pkl')
 
         if patience_counter >= early_stop_patience:
-            print(f'\nEarly stopping triggered after {epoch + 1} epochs!')
-            print(f'Best validation AP: {best_ap:.6f}')
+            log(f'\nEarly stopping triggered after {epoch + 1} epochs!')
+            log(f'Best validation AP: {best_ap:.6f}')
             break
 
     return best_ap
 
 
-# Used for generate test scores
+# Test inference, parallel across ranks. Each rank scores the strided subset of
+# query indices [RANK::WORLD_SIZE] and fills those rows in a zero-initialized
+# (n, 100) matrix. A single mpi_all_reduce('add') then sums across ranks to
+# recover the full result on every rank (each rank's matrix is zero outside
+# its own rows, so sum is exact). Avoids any temp-file gathering.
 def test_competition(model, test_src, test_time, test_candidates, batch_size=25):
-    """
-    For each query (src_i, t_i, [c_1..c_100]), score 100 candidates by expanding to
-    B*100 (src, dst, t) triples and running the model in one pass per chunk.
-    """
     model.eval()
     backbone, predictor = model[0], model[1]
-    all_scores = []
-    num_samples = len(test_src)
-    num_batches = (num_samples + batch_size - 1) // batch_size
+    n = len(test_src)
     num_cands = test_candidates.shape[1]
 
-    pbar = tqdm(range(num_batches), ncols=120, desc='Testing')
+    # Strided slice of query indices owned by this rank
+    my_idx = np.arange(RANK, n, WORLD_SIZE, dtype=np.int64) if IS_MPI else np.arange(n, dtype=np.int64)
+    my_n = len(my_idx)
+    my_n_batches = (my_n + batch_size - 1) // batch_size
+
+    full_scores = np.zeros((n, num_cands), dtype=np.float32)
+
+    pbar = tqdm(range(my_n_batches), ncols=120, desc=f'Testing[r{RANK}]', disable=not IS_MAIN)
     for batch_idx in pbar:
         start = batch_idx * batch_size
-        end = min((batch_idx + 1) * batch_size, num_samples)
+        end = min((batch_idx + 1) * batch_size, my_n)
+        idx_chunk = my_idx[start:end]
+        b = len(idx_chunk)
 
-        b = end - start
-        # repeat src and time for each of the 100 candidates
-        src_rep = np.repeat(test_src[start:end], num_cands).astype(np.int32)
-        t_rep = np.repeat(test_time[start:end].astype(np.float32), num_cands)
-        cand_flat = test_candidates[start:end].reshape(-1).astype(np.int32)
+        src_rep = np.repeat(test_src[idx_chunk], num_cands).astype(np.int32)
+        t_rep = np.repeat(test_time[idx_chunk].astype(np.float32), num_cands)
+        cand_flat = test_candidates[idx_chunk].reshape(-1).astype(np.int32)
 
         src_emb, dst_emb = backbone.compute_src_dst_node_temporal_embeddings(
             src_node_ids=src_rep, dst_node_ids=cand_flat, node_interact_times=t_rep)
         logit = predictor(src_emb, dst_emb).squeeze(-1)
-        probs = jt.sigmoid(logit).numpy().reshape(b, num_cands)
-        all_scores.append(probs)
+        probs = jt.sigmoid(logit).numpy().reshape(b, num_cands).astype(np.float32)
+        full_scores[idx_chunk] = probs
 
-    return np.vstack(all_scores)
+    # Aggregate: each rank holds non-zero only on its strided rows; sum recovers full.
+    if IS_MPI:
+        full_scores = jt.array(full_scores).mpi_all_reduce('add').numpy()
+
+    return full_scores
 
 
 # Main
@@ -180,9 +222,10 @@ args = parser.parse_args()
 if args.output_dir is None:
     args.output_dir = args.data_dir
 
-print('=' * 80)
-print(f'DyGFormer Competition - Dataset: {args.dataset}')
-print('=' * 80)
+log('=' * 80)
+log(f'DyGFormer Competition - Dataset: {args.dataset}')
+log(f'MPI: in_mpi={IS_MPI}, rank={RANK}, world_size={WORLD_SIZE}')
+log('=' * 80)
 
 # Load data - use int32 like main.py
 df = pd.read_csv(f'{args.data_dir}/{args.dataset}/train.csv')
@@ -197,7 +240,7 @@ test_src = test_df['src'].values.astype(np.int32)
 test_time = test_df['time'].values.astype(np.int32)
 test_candidates = test_df.iloc[:, 2:].values.astype(np.int32)
 
-print(f'Train+Val: {len(df)}, Test: {len(test_df)}')
+log(f'Train+Val: {len(df)}, Test: {len(test_df)}')
 
 # Split (same 85/15 as main.py)
 num_total = len(df)
@@ -226,6 +269,24 @@ full_data = TemporalData(
 train_loader = TemporalDataLoader(train_data, batch_size=args.batch_size, neg_sampling_ratio=1.0)
 val_loader = TemporalDataLoader(val_data, batch_size=args.batch_size, neg_sampling_ratio=1.0)
 
+# Manual data-parallel sharding: TemporalDataLoader is NOT a jittor.dataset.Dataset,
+# so jittor's auto-split does not apply.
+#
+# train_loader: gradients all-reduce inside optimizer.step(loss) -> all ranks must
+# call step the same number of times. We truncate arange to a multiple of WORLD_SIZE
+# so every rank gets exactly the same batch count (avoids end-of-epoch deadlock).
+#
+# val_loader: no MPI ops inside the loop body, so different ranks can iterate
+# different batch counts safely. We just stride-slice and aggregate scalars at the
+# end. (Truncation here is optional, but we keep it symmetric for cleanliness.)
+if IS_MPI:
+    n_keep = (len(train_loader.arange) // WORLD_SIZE) * WORLD_SIZE
+    train_loader.arange = train_loader.arange[:n_keep][RANK::WORLD_SIZE]
+    val_loader.arange = val_loader.arange[RANK::WORLD_SIZE]
+    log(f'[MPI] Train batches/rank: {len(train_loader.arange)}, '
+        f'Val batches/rank: {len(val_loader.arange)} '
+        f'(global per-step batch = {args.batch_size * WORLD_SIZE})')
+
 # neighbor sampler is built from FULL data so test queries can see all of train+val history
 full_neighbor_sampler = get_neighbor_sampler(full_data, 'recent', seed=1)
 
@@ -233,7 +294,7 @@ full_neighbor_sampler = get_neighbor_sampler(full_data, 'recent', seed=1)
 max_node = max(int(src_np.max()), int(dst_np.max()), int(test_candidates.max()))
 node_size = max_node + 1
 num_edges = len(df)
-print(f'Node size: {node_size}, Num edges: {num_edges}')
+log(f'Node size: {node_size}, Num edges: {num_edges}')
 
 # DyGFormer requires node_raw_features and edge_raw_features (zeros works; co-occurrence
 # + time encoder carry the signal, matching the upstream JODIE example)
@@ -242,7 +303,7 @@ edge_raw_features = np.zeros((num_edges + 1, args.edge_feat_dim), dtype=np.float
 
 # Detect bipartite: src/dst sets disjoint -> True
 is_bipartite = len(set(src_np.tolist()) & set(dst_np.tolist())) == 0
-print(f'Bipartite: {is_bipartite}')
+log(f'Bipartite: {is_bipartite}')
 
 backbone = DyGFormer(
     node_raw_features=node_raw_features,
@@ -262,39 +323,51 @@ predictor = MergeLayer(
     hidden_dim=args.node_feat_dim, output_dim=1)
 model = nn.Sequential(backbone, predictor)
 
+# Make sure all ranks start from identical parameters. Jittor's optimizer auto
+# all-reduces gradients in step(), so as long as params start identical they
+# stay identical across ranks. Cheap insurance even if they already match.
+if IS_MPI:
+    model.mpi_param_broadcast(root=0)
+
 optimizer = jt.nn.Adam(list(model.parameters()), lr=args.lr)
 criterion = jt.nn.BCEWithLogitsLoss()
 
 save_path = args.save_dir
-os.makedirs(save_path, exist_ok=True)
+if IS_MAIN:
+    os.makedirs(save_path, exist_ok=True)
 
 # Train
-print(f'\nTraining for {args.epochs} epoch(s) with early stopping (patience={args.early_stop})...')
+log(f'\nTraining for {args.epochs} epoch(s) with early stopping (patience={args.early_stop})...')
 best_ap = train(model, optimizer, criterion, train_loader, val_loader,
                 args.epochs, save_path, args.dataset, args.early_stop)
 
-# Load best model
-print('\nGenerating predictions using best model...')
+# All ranks load the best model from disk and run the parallel test_competition.
+# The previous epoch's final mpi_all_reduce inside test_val acts as a barrier, so
+# rank-0's jt.save has flushed by the time we reach this load on any rank.
+log('\nGenerating predictions using best model...')
 best_model_path = f'{save_path}/{args.dataset}_DyGFormer_best.pkl'
+latest_model_path = f'{save_path}/{args.dataset}_DyGFormer.pkl'
 if os.path.exists(best_model_path):
     model.load_state_dict(jt.load(best_model_path))
-    print(f'Loaded best model from {best_model_path}')
+    log(f'Loaded best model from {best_model_path}')
 else:
-    model.load_state_dict(jt.load(f'{save_path}/{args.dataset}_DyGFormer.pkl'))
-    print(f'Best model not found, using latest model')
+    model.load_state_dict(jt.load(latest_model_path))
+    log(f'Best model not found, using latest model')
 
-# Generate scores for test.csv
+# Parallel test inference: each rank scores its strided slice, then mpi_all_reduce
+# yields the full (n, 100) score matrix on every rank.
 scores = test_competition(model, test_src, test_time, test_candidates, args.test_batch_size)
 
-print(f'Scores shape: {scores.shape}, range: [{scores.min():.6f}, {scores.max():.6f}]')
+# Only rank 0 writes the CSV (file is now identical across ranks but we don't
+# want 4 processes racing on the same path).
+if IS_MAIN:
+    log(f'Scores shape: {scores.shape}, range: [{scores.min():.6f}, {scores.max():.6f}]')
+    output_file = f'{args.output_dir}/{args.dataset}/{args.dataset}_result.csv'
+    os.makedirs(osp.dirname(output_file), exist_ok=True)
+    with open(output_file, 'w') as f:
+        for row in scores:
+            f.write(','.join([f'{p:.8f}' for p in row]) + '\n')
 
-# Save (same format as main.py output)
-output_file = f'{args.output_dir}/{args.dataset}/{args.dataset}_result.csv'
-os.makedirs(osp.dirname(output_file), exist_ok=True)
-with open(output_file, 'w') as f:
-    for row in scores:
-        f.write(','.join([f'{p:.8f}' for p in row]) + '\n')
-
-print('\n' + '=' * 80)
-print('DONE')
-print('=' * 80)
+log('\n' + '=' * 80)
+log('DONE')
+log('=' * 80)
