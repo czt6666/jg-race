@@ -105,6 +105,11 @@ def test_val(model, loader):
         mrr_sum += float(np.sum(batch_mrr))
         mrr_count += len(batch_mrr)
 
+        # explicit cleanup to prevent memory accumulation during long validation
+        del src_emb_pos, dst_emb_pos, pos_logit, pos_score
+        del src_emb_neg, neg_dst_emb, neg_logit, neg_score
+        jt.sync_all()
+
     # Aggregate scalars across ranks. Pack into one Var, single all-reduce.
     if IS_MPI:
         agg = jt.array(
