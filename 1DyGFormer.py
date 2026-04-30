@@ -137,6 +137,9 @@ def train(model, optimizer, criterion, train_loader, val_loader,
             patience_counter = 0
             if IS_MAIN:
                 jt.save(model.state_dict(), f'{save_path}/{dataset_name}_DyGFormer_best.pkl')
+                os.sync()
+            if IS_MPI:
+                jt.array([0], dtype='int32').mpi_all_reduce('add')
             log(f'  -> New best AP: {best_ap:.6f}, model saved!')
         else:
             patience_counter += 1
@@ -144,6 +147,9 @@ def train(model, optimizer, criterion, train_loader, val_loader,
 
         if IS_MAIN:
             jt.save(model.state_dict(), f'{save_path}/{dataset_name}_DyGFormer.pkl')
+            os.sync()
+        if IS_MPI:
+            jt.array([0], dtype='int32').mpi_all_reduce('add')
 
         if patience_counter >= early_stop_patience:
             log(f'\nEarly stopping triggered after {epoch + 1} epochs!')
@@ -190,6 +196,9 @@ def test_competition(model, test_src, test_time, test_candidates,
         logit = predictor(src_emb, dst_emb).squeeze(-1)
         probs = jt.sigmoid(logit).numpy().reshape(b, num_cands).astype(np.float32)
         my_scores[start:end] = probs
+        # explicit cleanup to keep GPU / host memory low under heavy inference
+        del src_emb, dst_emb, logit, probs
+        jt.sync_all()
 
     # Single-GPU fast path
     if not IS_MPI:
@@ -197,21 +206,36 @@ def test_competition(model, test_src, test_time, test_candidates,
         full[my_idx] = my_scores
         return full
 
-    # Multi-rank: each rank dumps its slice; tiny all_reduce as barrier; rank 0 merges.
-    tmp_path = f'{tmp_dir}/_tmp_{dataset_name}_rank{RANK}.npz'
-    np.savez(tmp_path, idx=my_idx, scores=my_scores)
+    # Multi-rank: each rank dumps its slice with plain np.save (no zip overhead).
+    idx_path = f'{tmp_dir}/_tmp_{dataset_name}_rank{RANK}_idx.npy'
+    scores_path = f'{tmp_dir}/_tmp_{dataset_name}_rank{RANK}_scores.npy'
+    np.save(idx_path, my_idx)
+    np.save(scores_path, my_scores)
+    os.sync()
     jt.array([0], dtype='int32').mpi_all_reduce('add')  # barrier
 
     if not IS_MAIN:
         return None  # only rank 0 returns the merged result; others skip CSV write
 
-    full = np.zeros((n, num_cands), dtype=np.float32)
+    # Gather shards, sort by original index, return concatenated scores.
+    # Avoids a large zero-initialized 'full' matrix peak.
+    all_idx, all_scores = [], []
     for r in range(WORLD_SIZE):
-        p = f'{tmp_dir}/_tmp_{dataset_name}_rank{r}.npz'
-        d = np.load(p)
-        full[d['idx']] = d['scores']
-        os.remove(p)
-    return full
+        p_idx = f'{tmp_dir}/_tmp_{dataset_name}_rank{r}_idx.npy'
+        p_scores = f'{tmp_dir}/_tmp_{dataset_name}_rank{r}_scores.npy'
+        if not os.path.exists(p_scores):
+            raise RuntimeError(
+                f'Rank {r} did not produce its shard file: {p_scores}. '
+                f'This usually means the process was OOM-killed or crashed before saving. '
+                f'Try reducing --test_batch_size (current={batch_size}).')
+        all_idx.append(np.load(p_idx))
+        all_scores.append(np.load(p_scores))
+        os.remove(p_idx)
+        os.remove(p_scores)
+    all_idx = np.concatenate(all_idx)
+    all_scores = np.concatenate(all_scores, axis=0)
+    sort_order = np.argsort(all_idx)
+    return all_scores[sort_order]
 
 
 # Main
@@ -220,9 +244,9 @@ parser.add_argument('--dataset', type=str, required=True, help='Dataset name')
 parser.add_argument('--data_dir', type=str, default='./data', help='Data directory')
 parser.add_argument('--save_dir', type=str, default='./saved_models', help='Model save directory')
 parser.add_argument('--output_dir', type=str, default=None, help='Output directory (default: same as data_dir)')
-parser.add_argument('--epochs', type=int, default=100, help='Number of training epochs')
+parser.add_argument('--epochs', type=int, default=10, help='Number of training epochs')
 parser.add_argument('--batch_size', type=int, default=200, help='Batch size for train/val')
-parser.add_argument('--test_batch_size', type=int, default=25,
+parser.add_argument('--test_batch_size', type=int, default=5,
                     help='Test batch size in queries (each fans out to 100 candidates)')
 parser.add_argument('--early_stop', type=int, default=10, help='Early stopping patience')
 # DyGFormer hyper-parameters
