@@ -10,6 +10,34 @@ os.environ['JT_SYNC'] = '1'
 
 import jittor as jt
 from jittor import nn
+import types
+
+# Monkey-patch: JittorGeometric's DyGFormer calls jt.nn.utils.rnn.pad_sequence,
+# which does not exist in this Jittor version. Inject a compatible implementation
+# before importing JittorGeometric modules.
+def _pad_sequence(sequences, batch_first=True, padding_value=0.0):
+    if not sequences:
+        return jt.array([])
+    max_len = max(int(s.shape[0]) for s in sequences)
+    padded = []
+    for s in sequences:
+        if int(s.shape[0]) < max_len:
+            pad_len = max_len - int(s.shape[0])
+            pad_shape = [pad_len] + list(s.shape[1:])
+            pad = jt.full(pad_shape, padding_value, dtype=s.dtype)
+            s = jt.concat([s, pad], dim=0)
+        padded.append(s)
+    if batch_first:
+        return jt.stack(padded, dim=0)
+    else:
+        return jt.stack(padded, dim=1)
+
+if not hasattr(jt.nn, 'utils'):
+    jt.nn.utils = types.ModuleType('utils')
+if not hasattr(jt.nn.utils, 'rnn'):
+    jt.nn.utils.rnn = types.ModuleType('rnn')
+jt.nn.utils.rnn.pad_sequence = _pad_sequence
+
 import numpy as np
 import pandas as pd
 from tqdm import tqdm

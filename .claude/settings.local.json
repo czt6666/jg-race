@@ -12,7 +12,8 @@
       "Bash(python3 *)",
       "Bash(cat)",
       "Bash(python3 /tmp/strip.py /tmp/jittor_mpi.html)",
-      "Bash(PYTHONIOENCODING=utf-8 python3 /tmp/strip.py /tmp/jittor_mpi.html)"
+      "Bash(PYTHONIOENCODING=utf-8 python3 /tmp/strip.py /tmp/jittor_mpi.html)",
+      "Bash(git *)"
     ]
   }
 }
