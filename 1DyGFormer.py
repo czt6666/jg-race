@@ -1,6 +1,7 @@
 import os
 import os.path as osp
 import sys
+import time
 
 # Add JittorGeometric to path
 root = osp.dirname(osp.dirname(osp.abspath(__file__)))
@@ -240,35 +241,92 @@ def test_competition(model, test_src, test_time, test_candidates,
         return full
 
     # Multi-rank: each rank dumps its slice with plain np.save (no zip overhead).
+    def _save_and_fsync(path, arr):
+        # np.save then fsync the file AND its parent dir so metadata is durable
+        # and visible across ranks before we hit the barrier. os.sync() alone has
+        # been observed to be insufficient on some FS: rank 0 reached the gather
+        # loop and could not see another rank's shard even though the writer
+        # had returned from np.save.
+        np.save(path, arr)
+        fd = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        dfd = os.open(os.path.dirname(path) or '.', os.O_RDONLY)
+        try:
+            os.fsync(dfd)
+        finally:
+            os.close(dfd)
+        assert os.path.getsize(path) > 0, f'[r{RANK}] empty shard written: {path}'
+
     idx_path = f'{tmp_dir}/_tmp_{dataset_name}_rank{RANK}_idx.npy'
     scores_path = f'{tmp_dir}/_tmp_{dataset_name}_rank{RANK}_scores.npy'
-    np.save(idx_path, my_idx)
-    np.save(scores_path, my_scores)
-    os.sync()
-    jt.array([0], dtype='int32').mpi_all_reduce('add')  # barrier
+    done_path = f'{tmp_dir}/_tmp_{dataset_name}_rank{RANK}.done'
+    _save_and_fsync(idx_path, my_idx)
+    _save_and_fsync(scores_path, my_scores)
+    # Sentinel marker, written LAST. Other ranks treat presence-of-.done as
+    # the only valid "this rank is fully on disk" signal — checking the data
+    # files directly is unreliable because some filesystems make a file's
+    # metadata visible to other processes before its contents are.
+    _save_and_fsync(done_path, np.array([1], dtype=np.int8))
+    print(f'[r{RANK}] shards written: {scores_path} ({os.path.getsize(scores_path)} bytes)',
+          flush=True)
 
-    if not IS_MAIN:
-        return None  # only rank 0 returns the merged result; others skip CSV write
+    # Every rank now waits (file-based barrier) for ALL ranks' sentinels.
+    # If any rank's sentinel never shows up, every rank exits cleanly without
+    # touching any file — that way a rerun can resume from the shards on disk.
+    # We do NOT use mpi_all_reduce as the barrier here: if a rank crashes after
+    # save but before the all-reduce, the others would hang. File polling with
+    # a timeout is more forgiving.
+    def _wait_for(path, timeout_s=300.0, poll_s=1.0):
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            if os.path.exists(path) and os.path.getsize(path) > 0:
+                return True
+            time.sleep(poll_s)
+        return False
 
-    # Gather shards, sort by original index, return concatenated scores.
-    # Avoids a large zero-initialized 'full' matrix peak.
-    all_idx, all_scores = [], []
+    all_paths = []
     for r in range(WORLD_SIZE):
         p_idx = f'{tmp_dir}/_tmp_{dataset_name}_rank{r}_idx.npy'
         p_scores = f'{tmp_dir}/_tmp_{dataset_name}_rank{r}_scores.npy'
-        if not os.path.exists(p_scores):
-            raise RuntimeError(
-                f'Rank {r} did not produce its shard file: {p_scores}. '
-                f'This usually means the process was OOM-killed or crashed before saving. '
-                f'Try reducing --test_batch_size (current={batch_size}).')
+        p_done = f'{tmp_dir}/_tmp_{dataset_name}_rank{r}.done'
+        all_paths.append((r, p_idx, p_scores, p_done))
+
+    missing = []
+    for r, _, _, p_done in all_paths:
+        if not _wait_for(p_done):
+            missing.append(r)
+
+    if missing:
+        # Do NOT raise (would just print a stack trace per rank), do NOT delete.
+        # Just print and exit cleanly so a rerun can pick up the existing shards.
+        print(f'[r{RANK}] missing sentinels for ranks {missing}; '
+              f'leaving all shards in place. Rerun --eval_only to retry.',
+              flush=True)
+        return None
+
+    # All sentinels present. Only rank 0 actually aggregates and deletes.
+    if not IS_MAIN:
+        return None
+
+    log(f'All {WORLD_SIZE} ranks finished. Aggregating...')
+    all_idx, all_scores, paths_to_remove = [], [], []
+    for r, p_idx, p_scores, p_done in all_paths:
         all_idx.append(np.load(p_idx))
         all_scores.append(np.load(p_scores))
-        os.remove(p_idx)
-        os.remove(p_scores)
+        paths_to_remove.extend([p_idx, p_scores, p_done])
     all_idx = np.concatenate(all_idx)
     all_scores = np.concatenate(all_scores, axis=0)
     sort_order = np.argsort(all_idx)
-    return all_scores[sort_order]
+    result = all_scores[sort_order]
+    for p in paths_to_remove:
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+    return result
 
 
 # Main
@@ -303,7 +361,7 @@ args = parser.parse_args()
 if args.output_dir is None:
     args.output_dir = args.data_dir
 
-save_path = args.save_dir
+save_path = osp.abspath(args.save_dir)
 if IS_MAIN:
     os.makedirs(save_path, exist_ok=True)
 
@@ -433,6 +491,10 @@ scores = test_competition(model, test_src, test_time, test_candidates,
                            save_path, args.dataset, args.test_batch_size)
 
 if IS_MAIN:
+    if scores is None:
+        log('Aggregation skipped (not all ranks produced shards). '
+            'Re-run --eval_only to retry; existing shards in save_dir will be reused.')
+        sys.exit(0)
     log(f'Scores shape: {scores.shape}, range: [{scores.min():.6f}, {scores.max():.6f}]')
     output_file = f'{args.output_dir}/{args.dataset}/{args.dataset}_result.csv'
     os.makedirs(osp.dirname(output_file), exist_ok=True)
