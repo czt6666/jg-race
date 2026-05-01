@@ -209,30 +209,55 @@ def test_competition(model, test_src, test_time, test_candidates,
 
     my_idx = np.arange(RANK, n, WORLD_SIZE, dtype=np.int64) if IS_MPI else np.arange(n, dtype=np.int64)
     my_n = len(my_idx)
-    my_n_batches = (my_n + batch_size - 1) // batch_size
-    my_scores = np.zeros((my_n, num_cands), dtype=np.float32)
 
-    # Show progress on EVERY rank (with rank tag) so we can spot stragglers.
-    pbar = tqdm(range(my_n_batches), ncols=120,
-                desc=f'Testing[r{RANK}]', position=RANK)
-    for batch_idx in pbar:
-        start = batch_idx * batch_size
-        end = min((batch_idx + 1) * batch_size, my_n)
-        idx_chunk = my_idx[start:end]
-        b = len(idx_chunk)
+    # If a previous run already produced this rank's idx+scores shards (but
+    # crashed before aggregation, e.g. the .done sentinel bug), reuse them
+    # instead of redoing 1+ hours of inference. Each rank decides for itself.
+    cached_idx_path = f'{tmp_dir}/_tmp_{dataset_name}_rank{RANK}_idx.npy'
+    cached_scores_path = f'{tmp_dir}/_tmp_{dataset_name}_rank{RANK}_scores.npy'
+    skip_inference = (IS_MPI
+                      and os.path.exists(cached_idx_path)
+                      and os.path.exists(cached_scores_path))
+    if skip_inference:
+        try:
+            cached_idx = np.load(cached_idx_path)
+            cached_scores = np.load(cached_scores_path)
+            if (cached_idx.shape == my_idx.shape
+                    and np.array_equal(cached_idx, my_idx)
+                    and cached_scores.shape == (my_n, num_cands)):
+                my_scores = cached_scores.astype(np.float32, copy=False)
+                print(f'[r{RANK}] reusing cached shard ({my_n} queries), skipping inference',
+                      flush=True)
+            else:
+                skip_inference = False
+        except Exception:
+            skip_inference = False
 
-        src_rep = np.repeat(test_src[idx_chunk], num_cands).astype(np.int32)
-        t_rep = np.repeat(test_time[idx_chunk].astype(np.float32), num_cands)
-        cand_flat = test_candidates[idx_chunk].reshape(-1).astype(np.int32)
+    if not skip_inference:
+        my_scores = np.zeros((my_n, num_cands), dtype=np.float32)
+        my_n_batches = (my_n + batch_size - 1) // batch_size
 
-        src_emb, dst_emb = backbone.compute_src_dst_node_temporal_embeddings(
-            src_node_ids=src_rep, dst_node_ids=cand_flat, node_interact_times=t_rep)
-        logit = predictor(src_emb, dst_emb).squeeze(-1)
-        probs = jt.sigmoid(logit).numpy().reshape(b, num_cands).astype(np.float32)
-        my_scores[start:end] = probs
-        # explicit cleanup to keep GPU / host memory low under heavy inference
-        del src_emb, dst_emb, logit, probs
-        jt.sync_all()
+        # Show progress on EVERY rank (with rank tag) so we can spot stragglers.
+        pbar = tqdm(range(my_n_batches), ncols=120,
+                    desc=f'Testing[r{RANK}]', position=RANK)
+        for batch_idx in pbar:
+            start = batch_idx * batch_size
+            end = min((batch_idx + 1) * batch_size, my_n)
+            idx_chunk = my_idx[start:end]
+            b = len(idx_chunk)
+
+            src_rep = np.repeat(test_src[idx_chunk], num_cands).astype(np.int32)
+            t_rep = np.repeat(test_time[idx_chunk].astype(np.float32), num_cands)
+            cand_flat = test_candidates[idx_chunk].reshape(-1).astype(np.int32)
+
+            src_emb, dst_emb = backbone.compute_src_dst_node_temporal_embeddings(
+                src_node_ids=src_rep, dst_node_ids=cand_flat, node_interact_times=t_rep)
+            logit = predictor(src_emb, dst_emb).squeeze(-1)
+            probs = jt.sigmoid(logit).numpy().reshape(b, num_cands).astype(np.float32)
+            my_scores[start:end] = probs
+            # explicit cleanup to keep GPU / host memory low under heavy inference
+            del src_emb, dst_emb, logit, probs
+            jt.sync_all()
 
     # Single-GPU fast path
     if not IS_MPI:
@@ -262,7 +287,10 @@ def test_competition(model, test_src, test_time, test_candidates,
 
     idx_path = f'{tmp_dir}/_tmp_{dataset_name}_rank{RANK}_idx.npy'
     scores_path = f'{tmp_dir}/_tmp_{dataset_name}_rank{RANK}_scores.npy'
-    done_path = f'{tmp_dir}/_tmp_{dataset_name}_rank{RANK}.done'
+    # NOTE: must end with .npy. np.save silently appends .npy if the path
+    # doesn't already have it, which would cause os.open(done_path) below
+    # to fail with FileNotFoundError on the un-suffixed name.
+    done_path = f'{tmp_dir}/_tmp_{dataset_name}_rank{RANK}_done.npy'
     _save_and_fsync(idx_path, my_idx)
     _save_and_fsync(scores_path, my_scores)
     # Sentinel marker, written LAST. Other ranks treat presence-of-.done as
@@ -291,7 +319,7 @@ def test_competition(model, test_src, test_time, test_candidates,
     for r in range(WORLD_SIZE):
         p_idx = f'{tmp_dir}/_tmp_{dataset_name}_rank{r}_idx.npy'
         p_scores = f'{tmp_dir}/_tmp_{dataset_name}_rank{r}_scores.npy'
-        p_done = f'{tmp_dir}/_tmp_{dataset_name}_rank{r}.done'
+        p_done = f'{tmp_dir}/_tmp_{dataset_name}_rank{r}_done.npy'
         all_paths.append((r, p_idx, p_scores, p_done))
 
     missing = []
