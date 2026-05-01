@@ -293,10 +293,19 @@ parser.add_argument('--patch_size', type=int, default=1)
 parser.add_argument('--max_seq_len', type=int, default=32)
 parser.add_argument('--dropout', type=float, default=0.1)
 parser.add_argument('--lr', type=float, default=1e-4)
+parser.add_argument('--eval_only', action='store_true',
+                    help='Skip training and directly evaluate using the saved best model')
+parser.add_argument('--model_path', type=str, default=None,
+                    help='Explicit model checkpoint path to load in eval_only mode '
+                         '(overrides the default best/latest auto-search)')
 args = parser.parse_args()
 
 if args.output_dir is None:
     args.output_dir = args.data_dir
+
+save_path = args.save_dir
+if IS_MAIN:
+    os.makedirs(save_path, exist_ok=True)
 
 log('=' * 80)
 log(f'DyGFormer Competition - Dataset: {args.dataset}')
@@ -345,16 +354,7 @@ full_data = TemporalData(
 train_loader = TemporalDataLoader(train_data, batch_size=args.batch_size, neg_sampling_ratio=1.0)
 val_loader = TemporalDataLoader(val_data, batch_size=args.batch_size, neg_sampling_ratio=1.0)
 
-# Manual data-parallel sharding: TemporalDataLoader is NOT a jittor.dataset.Dataset,
-# so jittor's auto-split does not apply.
-#
-# train_loader: gradients all-reduce inside optimizer.step(loss) -> all ranks must
-# call step the same number of times. We truncate arange to a multiple of WORLD_SIZE
-# so every rank gets exactly the same batch count (avoids end-of-epoch deadlock).
-#
-# val_loader: no MPI ops inside the loop body, so different ranks can iterate
-# different batch counts safely. We just stride-slice and aggregate scalars at the
-# end. (Truncation here is optional, but we keep it symmetric for cleanliness.)
+# Manual data-parallel sharding
 if IS_MPI:
     n_keep = (len(train_loader.arange) // WORLD_SIZE) * WORLD_SIZE
     train_loader.arange = train_loader.arange[:n_keep][RANK::WORLD_SIZE]
@@ -372,12 +372,9 @@ node_size = max_node + 1
 num_edges = len(df)
 log(f'Node size: {node_size}, Num edges: {num_edges}')
 
-# DyGFormer requires node_raw_features and edge_raw_features (zeros works; co-occurrence
-# + time encoder carry the signal, matching the upstream JODIE example)
 node_raw_features = np.zeros((node_size, args.node_feat_dim), dtype=np.float32)
 edge_raw_features = np.zeros((num_edges + 1, args.edge_feat_dim), dtype=np.float32)
 
-# Detect bipartite: src/dst sets disjoint -> True
 is_bipartite = len(set(src_np.tolist()) & set(dst_np.tolist())) == 0
 log(f'Bipartite: {is_bipartite}')
 
@@ -399,45 +396,39 @@ predictor = MergeLayer(
     hidden_dim=args.node_feat_dim, output_dim=1)
 model = nn.Sequential(backbone, predictor)
 
-# Make sure all ranks start from identical parameters. Jittor's optimizer auto
-# all-reduces gradients in step(), so as long as params start identical they
-# stay identical across ranks. Cheap insurance even if they already match.
 if IS_MPI:
     model.mpi_param_broadcast(root=0)
 
 optimizer = jt.nn.Adam(list(model.parameters()), lr=args.lr)
 criterion = jt.nn.BCEWithLogitsLoss()
 
-save_path = args.save_dir
-if IS_MAIN:
-    os.makedirs(save_path, exist_ok=True)
-
-# Train
-log(f'\nTraining for {args.epochs} epoch(s) with early stopping (patience={args.early_stop})...')
-best_ap = train(model, optimizer, criterion, train_loader, val_loader,
-                args.epochs, save_path, args.dataset, args.early_stop)
-
-# All ranks load the best model from disk and run the parallel test_competition.
-# Explicit barrier: rank 0's last jt.save in the train loop happens AFTER the
-# epoch's mpi_all_reduce in test_val, so we need a fresh barrier here before
-# any rank tries to read those files (otherwise --epochs 1 races and rank 1/2/3
-# see partial state on disk).
-if IS_MPI:
-    jt.array([0], dtype='int32').mpi_all_reduce('add')
+if not args.eval_only:
+    # Train
+    log(f'\nTraining for {args.epochs} epoch(s) with early stopping (patience={args.early_stop})...')
+    best_ap = train(model, optimizer, criterion, train_loader, val_loader,
+                    args.epochs, save_path, args.dataset, args.early_stop)
+    # Explicit barrier before any rank reads saved files
+    if IS_MPI:
+        jt.array([0], dtype='int32').mpi_all_reduce('add')
+else:
+    log('\n--eval_only is set, skipping training.')
 
 log('\nGenerating predictions using best model...')
-best_model_path = f'{save_path}/{args.dataset}_DyGFormer_best.pkl'
-latest_model_path = f'{save_path}/{args.dataset}_DyGFormer.pkl'
-if os.path.exists(best_model_path):
-    model.load_state_dict(jt.load(best_model_path))
-    log(f'Loaded best model from {best_model_path}')
+# If --model_path is given, use it directly; otherwise fall back to best/latest auto-search.
+if args.model_path is not None:
+    model.load_state_dict(jt.load(args.model_path))
+    log(f'Loaded explicit model from {args.model_path}')
 else:
-    model.load_state_dict(jt.load(latest_model_path))
-    log(f'Best model not found, using latest model')
+    best_model_path = f'{save_path}/{args.dataset}_DyGFormer_best.pkl'
+    latest_model_path = f'{save_path}/{args.dataset}_DyGFormer.pkl'
+    if os.path.exists(best_model_path):
+        model.load_state_dict(jt.load(best_model_path))
+        log(f'Loaded best model from {best_model_path}')
+    else:
+        model.load_state_dict(jt.load(latest_model_path))
+        log(f'Best model not found, using latest model')
 
-# Parallel test inference: each rank scores its strided slice, dumps a .npz to
-# save_path, barrier, rank 0 merges. Returns the full score matrix on rank 0
-# only; other ranks return None and skip the CSV write.
+# Parallel test inference
 scores = test_competition(model, test_src, test_time, test_candidates,
                            save_path, args.dataset, args.test_batch_size)
 
