@@ -96,9 +96,7 @@ def build_graph(data: SimpleNamespace):
 
     edge_index = jt.array(data.edge_index)
     edge_weight = None
-    edge_index, edge_weight = gcn_norm(
-        edge_index, edge_weight, v_num, improved=False, add_self_loops=True
-    )
+    edge_index, edge_weight = gcn_norm(edge_index, edge_weight, v_num, improved=False, add_self_loops=True)
     with jt.no_grad():
         csc = cootocsc(edge_index, edge_weight, v_num)
         csr = cootocsr(edge_index, edge_weight, v_num)
