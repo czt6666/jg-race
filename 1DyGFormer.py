@@ -78,38 +78,45 @@ def test_val(model, loader):
     mrr_sum, mrr_count = 0.0, 0
 
     loader_tqdm = tqdm(loader, ncols=120, desc='Validation', disable=not IS_MAIN)
-    for _, batch_data in enumerate(loader_tqdm):
-        src = np.array(batch_data.src).astype(np.int32)
-        dst = np.array(batch_data.dst).astype(np.int32)
-        t = np.array(batch_data.t).astype(np.float32)
-        neg_dst = np.array(batch_data.neg_dst).astype(np.int32)
+    # jt.no_grad() disables autograd graph construction. model.eval() alone does
+    # NOT do this — without no_grad, every forward call retains the full grad
+    # graph and VRAM blows up linearly across batches.
+    with jt.no_grad():
+        for batch_idx, batch_data in enumerate(loader_tqdm):
+            src = np.array(batch_data.src).astype(np.int32)
+            dst = np.array(batch_data.dst).astype(np.int32)
+            t = np.array(batch_data.t).astype(np.float32)
+            neg_dst = np.array(batch_data.neg_dst).astype(np.int32)
 
-        # positive pairs: (src, dst, t)
-        src_emb_pos, dst_emb_pos = backbone.compute_src_dst_node_temporal_embeddings(
-            src_node_ids=src, dst_node_ids=dst, node_interact_times=t)
-        pos_logit = predictor(src_emb_pos, dst_emb_pos).squeeze(-1)
-        pos_score = jt.sigmoid(pos_logit).numpy()
+            # positive pairs: (src, dst, t)
+            src_emb_pos, dst_emb_pos = backbone.compute_src_dst_node_temporal_embeddings(
+                src_node_ids=src, dst_node_ids=dst, node_interact_times=t)
+            pos_logit = predictor(src_emb_pos, dst_emb_pos).squeeze(-1)
+            pos_score = jt.sigmoid(pos_logit).numpy()
 
-        # negative pairs: (src, neg_dst, t)
-        src_emb_neg, neg_dst_emb = backbone.compute_src_dst_node_temporal_embeddings(
-            src_node_ids=src, dst_node_ids=neg_dst, node_interact_times=t)
-        neg_logit = predictor(src_emb_neg, neg_dst_emb).squeeze(-1)
-        neg_score = jt.sigmoid(neg_logit).numpy()
+            # negative pairs: (src, neg_dst, t)
+            src_emb_neg, neg_dst_emb = backbone.compute_src_dst_node_temporal_embeddings(
+                src_node_ids=src, dst_node_ids=neg_dst, node_interact_times=t)
+            neg_logit = predictor(src_emb_neg, neg_dst_emb).squeeze(-1)
+            neg_score = jt.sigmoid(neg_logit).numpy()
 
-        y_true = np.concatenate([np.ones_like(pos_score), np.zeros_like(neg_score)])
-        y_score = np.concatenate([pos_score, neg_score])
-        ap_sum += float(average_precision_score(y_true, y_score))
-        auc_sum += float(roc_auc_score(y_true, y_score))
-        n_batches += 1
+            y_true = np.concatenate([np.ones_like(pos_score), np.zeros_like(neg_score)])
+            y_score = np.concatenate([pos_score, neg_score])
+            ap_sum += float(average_precision_score(y_true, y_score))
+            auc_sum += float(roc_auc_score(y_true, y_score))
+            n_batches += 1
 
-        batch_mrr = mrr_eval.eval(pos_score, neg_score)
-        mrr_sum += float(np.sum(batch_mrr))
-        mrr_count += len(batch_mrr)
+            batch_mrr = mrr_eval.eval(pos_score, neg_score)
+            mrr_sum += float(np.sum(batch_mrr))
+            mrr_count += len(batch_mrr)
 
-        # explicit cleanup to prevent memory accumulation during long validation
-        del src_emb_pos, dst_emb_pos, pos_logit, pos_score
-        del src_emb_neg, neg_dst_emb, neg_logit, neg_score
-        jt.sync_all()
+            del src_emb_pos, dst_emb_pos, pos_logit, pos_score
+            del src_emb_neg, neg_dst_emb, neg_logit, neg_score
+            # Periodic memory pool flush — bounds peak VRAM during long val runs.
+            if (batch_idx + 1) % 64 == 0:
+                jt.gc()
+            jt.sync_all()
+    jt.gc()
 
     # Aggregate scalars across ranks. Pack into one Var, single all-reduce.
     if IS_MPI:
@@ -190,6 +197,10 @@ def train(model, optimizer, criterion, train_loader, val_loader,
             log(f'Best validation AP: {best_ap:.6f}')
             break
 
+        # Flush memory pool between epochs so a long run doesn't accumulate
+        # ever-growing fragmentation across epochs.
+        jt.gc()
+
     return best_ap
 
 
@@ -201,7 +212,7 @@ def train(model, optimizer, criterion, train_loader, val_loader,
 # aware OpenMPI, all-reducing a GPU Var of that size is brittle (can hang). File
 # gather is unconditional and doesn't care about MPI build flavor.
 def test_competition(model, test_src, test_time, test_candidates,
-                      tmp_dir, dataset_name, batch_size=25):
+                      tmp_dir, dataset_name, batch_size=25, cand_chunk_size=25):
     model.eval()
     backbone, predictor = model[0], model[1]
     n = len(test_src)
@@ -236,28 +247,49 @@ def test_competition(model, test_src, test_time, test_candidates,
     if not skip_inference:
         my_scores = np.zeros((my_n, num_cands), dtype=np.float32)
         my_n_batches = (my_n + batch_size - 1) // batch_size
+        # Cap chunk so we never exceed what we'd compute anyway in one forward.
+        chunk_pairs = max(1, min(cand_chunk_size, batch_size * num_cands))
 
         # Show progress on EVERY rank (with rank tag) so we can spot stragglers.
         pbar = tqdm(range(my_n_batches), ncols=120,
                     desc=f'Testing[r{RANK}]', position=RANK)
-        for batch_idx in pbar:
-            start = batch_idx * batch_size
-            end = min((batch_idx + 1) * batch_size, my_n)
-            idx_chunk = my_idx[start:end]
-            b = len(idx_chunk)
+        # Disable autograd for the entire inference loop. Without this, every
+        # forward pass keeps its full grad graph alive and VRAM grows until OOM
+        # — model.eval() does NOT disable autograd, only dropout/BN behavior.
+        with jt.no_grad():
+            for batch_idx in pbar:
+                start = batch_idx * batch_size
+                end = min((batch_idx + 1) * batch_size, my_n)
+                idx_chunk = my_idx[start:end]
+                b = len(idx_chunk)
+                total_pairs = b * num_cands
 
-            src_rep = np.repeat(test_src[idx_chunk], num_cands).astype(np.int32)
-            t_rep = np.repeat(test_time[idx_chunk].astype(np.float32), num_cands)
-            cand_flat = test_candidates[idx_chunk].reshape(-1).astype(np.int32)
+                src_rep = np.repeat(test_src[idx_chunk], num_cands).astype(np.int32)
+                t_rep = np.repeat(test_time[idx_chunk].astype(np.float32), num_cands)
+                cand_flat = test_candidates[idx_chunk].reshape(-1).astype(np.int32)
 
-            src_emb, dst_emb = backbone.compute_src_dst_node_temporal_embeddings(
-                src_node_ids=src_rep, dst_node_ids=cand_flat, node_interact_times=t_rep)
-            logit = predictor(src_emb, dst_emb).squeeze(-1)
-            probs = jt.sigmoid(logit).numpy().reshape(b, num_cands).astype(np.float32)
-            my_scores[start:end] = probs
-            # explicit cleanup to keep GPU / host memory low under heavy inference
-            del src_emb, dst_emb, logit, probs
-            jt.sync_all()
+                # Sub-chunk the (src,dst) pair list. Each forward call sees at
+                # most chunk_pairs pairs, so peak attention/feature tensors are
+                # bounded regardless of test_batch_size.
+                probs_buf = np.empty(total_pairs, dtype=np.float32)
+                for cs in range(0, total_pairs, chunk_pairs):
+                    ce = min(cs + chunk_pairs, total_pairs)
+                    src_emb, dst_emb = backbone.compute_src_dst_node_temporal_embeddings(
+                        src_node_ids=src_rep[cs:ce],
+                        dst_node_ids=cand_flat[cs:ce],
+                        node_interact_times=t_rep[cs:ce])
+                    logit = predictor(src_emb, dst_emb).squeeze(-1)
+                    probs_buf[cs:ce] = jt.sigmoid(logit).numpy().astype(np.float32)
+                    del src_emb, dst_emb, logit
+                    jt.sync_all()
+
+                my_scores[start:end] = probs_buf.reshape(b, num_cands)
+                del probs_buf
+                # Periodically flush jittor's memory pool. Without this the pool
+                # holds onto every tensor it has ever allocated in this run.
+                if (batch_idx + 1) % 64 == 0:
+                    jt.gc()
+        jt.gc()
 
     # Single-GPU fast path
     if not IS_MPI:
@@ -367,6 +399,10 @@ parser.add_argument('--epochs', type=int, default=10, help='Number of training e
 parser.add_argument('--batch_size', type=int, default=200, help='Batch size for train/val')
 parser.add_argument('--test_batch_size', type=int, default=5,
                     help='Test batch size in queries (each fans out to 100 candidates)')
+parser.add_argument('--cand_chunk_size', type=int, default=25,
+                    help='How many (src,dst) pairs per single forward pass during '
+                         'test inference. Lower = less peak VRAM. Default 25 keeps '
+                         '4 chunks per test_batch_size=1 query.')
 parser.add_argument('--early_stop', type=int, default=10, help='Early stopping patience')
 # DyGFormer hyper-parameters
 parser.add_argument('--node_feat_dim', type=int, default=128)
@@ -485,10 +521,11 @@ model = nn.Sequential(backbone, predictor)
 if IS_MPI:
     model.mpi_param_broadcast(root=0)
 
-optimizer = jt.nn.Adam(list(model.parameters()), lr=args.lr)
-criterion = jt.nn.BCEWithLogitsLoss()
-
 if not args.eval_only:
+    # Adam keeps two state tensors (m, v) per parameter — 2× the model's GPU
+    # footprint. Don't allocate it under --eval_only.
+    optimizer = jt.nn.Adam(list(model.parameters()), lr=args.lr)
+    criterion = jt.nn.BCEWithLogitsLoss()
     # Train
     log(f'\nTraining for {args.epochs} epoch(s) with early stopping (patience={args.early_stop})...')
     best_ap = train(model, optimizer, criterion, train_loader, val_loader,
@@ -516,7 +553,8 @@ else:
 
 # Parallel test inference
 scores = test_competition(model, test_src, test_time, test_candidates,
-                           save_path, args.dataset, args.test_batch_size)
+                           save_path, args.dataset, args.test_batch_size,
+                           cand_chunk_size=args.cand_chunk_size)
 
 if IS_MAIN:
     if scores is None:
