@@ -1,0 +1,189 @@
+[38;5;2m[i 0603 05:10:50.842623 60 compiler.py:955] Jittor(1.3.11.0) src: /opt/miniconda/envs/rtdetr_env/lib/python3.7/site-packages/jittor[m
+[38;5;2m[i 0603 05:10:50.848168 60 compiler.py:956] g++ at /usr/bin/g++(11.4.0)[m
+[38;5;2m[i 0603 05:10:50.848263 60 compiler.py:957] cache_path: /root/.cache/jittor/jt1.3.11/g++11.4.0/py3.7.12/Linux-6.8.0-52x51/IntelRXeonRGolxc9/8289/default[m
+[38;5;2m[i 0603 05:10:50.855224 60 __init__.py:412] Found /usr/local/cuda/bin/nvcc(12.1.105) at /usr/local/cuda/bin/nvcc.[m
+[38;5;2m[i 0603 05:10:50.861825 60 __init__.py:412] Found addr2line(2.38) at /usr/bin/addr2line.[m
+[38;5;2m[i 0603 05:10:51.077482 60 compiler.py:1012] cuda key:cu12.1.105_sm_86[m
+[38;5;2m[i 0603 05:10:51.723350 60 __init__.py:227] Total mem: 124.54GB, using 16 procs for compiling.[m
+[38;5;2m[i 0603 05:10:51.861686 60 jit_compiler.cc:28] Load cc_path: /usr/bin/g++[m
+[38;5;2m[i 0603 05:10:51.988814 60 init.cc:63] Found cuda archs: [86,][m
+[38;5;2m[i 0603 05:10:53.244580 60 cuda_flags.cc:55] CUDA enabled.[m
+================================================================================
+DyGFormer_v4 (test) Multi-GPU Competition
+Dataset: dataset1
+MPI: in_mpi=False, rank=0, world_size=1
+Per-GPU batch: 200, Global batch: 200
+Base LR: 0.0001, Effective LR (scaled): 0.0001
+Improvements: cold_start_threshold=8, use_sqrt_neg=True
+================================================================================
+Train+Val: 690848, Test: 61051
+Bipartite: False
+Cold-start augmentation enabled (threshold=8, affected src nodes in train: 9562)
+Node size: 43215, Num edges: 690848
+[38;5;3m[w 0603 05:10:59.247011 60 nn.py:2419]  The `Parameter` interface isn't needed in Jittor, this interface
+does nothings and it is just used for compatible.
+    
+A Jittor Var is a Parameter
+when it is a member of Module, if you don't want a Jittor
+Var menber is treated as a Parameter, just name it startswith
+underscore `_`.
+    [m
+[38;5;3m[w 0603 05:10:59.648528 60 nn.py:2419]  The `Parameter` interface isn't needed in Jittor, this interface
+does nothings and it is just used for compatible.
+    
+A Jittor Var is a Parameter
+when it is a member of Module, if you don't want a Jittor
+Var menber is treated as a Parameter, just name it startswith
+underscore `_`.
+    [m
+[38;5;3m[w 0603 05:10:59.649193 60 nn.py:2419]  The `Parameter` interface isn't needed in Jittor, this interface
+does nothings and it is just used for compatible.
+    
+A Jittor Var is a Parameter
+when it is a member of Module, if you don't want a Jittor
+Var menber is treated as a Parameter, just name it startswith
+underscore `_`.
+    [m
+[38;5;3m[w 0603 05:10:59.649500 60 nn.py:2419]  The `Parameter` interface isn't needed in Jittor, this interface
+does nothings and it is just used for compatible.
+    
+A Jittor Var is a Parameter
+when it is a member of Module, if you don't want a Jittor
+Var menber is treated as a Parameter, just name it startswith
+underscore `_`.
+    [m
+
+Training for 10 epoch(s) with early stopping (patience=3)...
+Epoch 1:   0%|                                                                                 | 0/2937 [00:00<?, ?it/s]
+Compiling Operators(64/64) used: 5.31s eta:    0s 
+Epoch 1, loss: 3.0400:   0%|                                                                   | 0/2937 [00:07<?, ?it/s]Epoch 1, loss: 3.0400:   0%|                                                         | 1/2937 [00:07<6:26:39,  7.90s/it][38;5;2m[i 0603 05:11:08.963371 60 cuda_device_allocator.cc:30] 
+=== display_memory_info ===
+ total_cpu_ram: 124.5GB total_device_ram: 23.69GB
+ hold_vars: 1395 lived_vars: 9978 lived_ops: 10024
+ name: sfrl is_device: 1 used: 16.12GB(69.3%) unused: 7.134GB(30.7%) ULB: 281.5MB ULBO:   844MB total: 23.25GB
+ name: sfrl is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used: 11.73MB(1.55%) unused: 743.3MB(98.4%) ULB:   338MB ULBO:   338MB total:   755MB
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 1 used:     0 B(0%) unused:   1.5KB(100%) total:   1.5KB
+ cpu&gpu: 23.99GB gpu: 23.25GB cpu:   755MB
+ free: cpu(  2.6GB) gpu(121.9MB)
+ swap: total(    0 B) last(    0 B)
+===========================
+[m
+[38;5;2m[i 0603 05:11:09.506002 60 cuda_device_allocator.cc:30] 
+=== display_memory_info ===
+ total_cpu_ram: 124.5GB total_device_ram: 23.69GB
+ hold_vars: 212 lived_vars: 3890 lived_ops: 4145
+ name: sfrl is_device: 1 used: 15.09GB(65.8%) unused: 7.835GB(34.2%) ULB:   844MB ULBO:   844MB total: 22.93GB
+ name: sfrl is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used: 10.94MB(49.7%) unused: 11.06MB(50.3%) ULB: 2.364MB ULBO:     5MB total:    22MB
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 1 used:     0 B(0%) unused:   1.5KB(100%) total:   1.5KB
+ cpu&gpu: 22.95GB gpu: 22.93GB cpu:    22MB
+ free: cpu(3.324GB) gpu(461.9MB)
+ swap: total(    0 B) last(    0 B)
+===========================
+[m
+Epoch 1, loss: 2.9993:   0%|                                                         | 1/2937 [00:10<6:26:39,  7.90s/it]Epoch 1, loss: 2.9993:   0%|                                                         | 2/2937 [00:10<3:46:36,  4.63s/it][38;5;2m[i 0603 05:11:11.437215 60 cuda_device_allocator.cc:30] 
+=== display_memory_info ===
+ total_cpu_ram: 124.5GB total_device_ram: 23.69GB
+ hold_vars: 1755 lived_vars: 12947 lived_ops: 13216
+ name: sfrl is_device: 1 used: 10.36GB(46.8%) unused: 11.79GB(53.2%) ULB: 1.465GB ULBO: 1.465GB total: 22.15GB
+ name: sfrl is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used: 12.08MB(48.3%) unused: 12.92MB(51.7%) ULB: 2.364MB ULBO:     5MB total:    25MB
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 1 used:     0 B(0%) unused:   2.5KB(100%) total:   2.5KB
+ cpu&gpu: 22.17GB gpu: 22.15GB cpu:    25MB
+ free: cpu(3.448GB) gpu(1.228GB)
+ swap: total(    0 B) last(    0 B)
+===========================
+[m
+[38;5;2m[i 0603 05:11:11.665371 60 cuda_device_allocator.cc:30] 
+=== display_memory_info ===
+ total_cpu_ram: 124.5GB total_device_ram: 23.69GB
+ hold_vars: 1755 lived_vars: 12947 lived_ops: 13216
+ name: sfrl is_device: 1 used: 20.12GB(86.1%) unused: 3.235GB(13.9%) ULB: 352.2MB ULBO:   610MB total: 23.36GB
+ name: sfrl is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used: 12.08MB(54.9%) unused: 9.919MB(45.1%) ULB: 2.364MB ULBO:     5MB total:    22MB
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ cpu&gpu: 23.38GB gpu: 23.36GB cpu:    22MB
+ free: cpu(3.459GB) gpu(21.94MB)
+ swap: total(    0 B) last(    0 B)
+===========================
+[m
+[38;5;2m[i 0603 05:11:11.665887 60 cuda_device_allocator.cc:30] 
+=== display_memory_info ===
+ total_cpu_ram: 124.5GB total_device_ram: 23.69GB
+ hold_vars: 1755 lived_vars: 12947 lived_ops: 13216
+ name: sfrl is_device: 1 used: 20.12GB(86.1%) unused: 3.235GB(13.9%) ULB: 352.2MB ULBO:   610MB total: 23.36GB
+ name: sfrl is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used: 12.08MB(54.9%) unused: 9.919MB(45.1%) ULB: 2.364MB ULBO:     5MB total:    22MB
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ cpu&gpu: 23.38GB gpu: 23.36GB cpu:    22MB
+ free: cpu(3.462GB) gpu(21.94MB)
+ swap: total(    0 B) last(    0 B)
+===========================
+[m
+[38;5;1m[e 0603 05:11:11.666103 60 executor.cc:682] 
+=== display_memory_info ===
+ total_cpu_ram: 124.5GB total_device_ram: 23.69GB
+ hold_vars: 1755 lived_vars: 12947 lived_ops: 13216
+ name: sfrl is_device: 1 used: 20.12GB(86.1%) unused: 3.235GB(13.9%) ULB: 352.2MB ULBO:   610MB total: 23.36GB
+ name: sfrl is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used: 12.08MB(54.9%) unused: 9.919MB(45.1%) ULB: 2.364MB ULBO:     5MB total:    22MB
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ cpu&gpu: 23.38GB gpu: 23.36GB cpu:    22MB
+ free: cpu(3.462GB) gpu(21.94MB)
+ swap: total(    0 B) last(    0 B)
+===========================
+[m
+Epoch 1, loss: 2.9993:   0%|                                                         | 2/2937 [00:12<4:53:46,  6.01s/it]
+Traceback (most recent call last):
+  File "4DyGFormer_test.py", line 947, in <module>
+    cold_start_cfg=cold_start_cfg,
+  File "4DyGFormer_test.py", line 543, in train
+    cold_start_cfg["fallback_dst"],
+  File "4DyGFormer_test.py", line 256, in augment_cold_start
+    src_node_ids=nbr_arr, dst_node_ids=dst_arr, node_interact_times=t_arr
+  File "/opt/miniconda/envs/rtdetr_env/lib/python3.7/site-packages/jittor_geometric/nn/models/dygformer.py", line 149, in compute_src_dst_node_temporal_embeddings
+    dst_padded_nodes_neighbor_ids=dst_padded_nodes_neighbor_ids)
+  File "/opt/miniconda/envs/rtdetr_env/lib/python3.7/site-packages/jittor/__init__.py", line 1211, in __call__
+    return self.execute(*args, **kw)
+  File "/opt/miniconda/envs/rtdetr_env/lib/python3.7/site-packages/jittor_geometric/nn/models/dygformer.py", line 528, in execute
+    dst_padded_nodes_neighbor_ids=dst_padded_nodes_neighbor_ids)
+  File "/opt/miniconda/envs/rtdetr_env/lib/python3.7/site-packages/jittor_geometric/nn/models/dygformer.py", line 505, in count_nodes_appearances
+    src_padded_nodes_appearances, axis=0)
+  File "<__array_function__ internals>", line 6, in stack
+  File "/opt/miniconda/envs/rtdetr_env/lib/python3.7/site-packages/numpy/core/shape_base.py", line 420, in stack
+    arrays = [asanyarray(arr) for arr in arrays]
+  File "/opt/miniconda/envs/rtdetr_env/lib/python3.7/site-packages/numpy/core/shape_base.py", line 420, in <listcomp>
+    arrays = [asanyarray(arr) for arr in arrays]
+RuntimeError: Wrong inputs arguments, Please refer to examples(help(jt.numpy)).
+
+Types of your inputs are:
+ self	= Var,
+ args	= (),
+
+The function declarations are:
+ ArrayArgs fetch_sync()
+
+Failed reason:[38;5;1m[f 0603 05:11:11.666241 60 mem_info.cc:272] 
+*******************
+GPU memory is overflow, please reduce your batch_size or data size!
+Total: 23.69GB Used: 23.36GB[m
+[4DyGFormer_test DONE]

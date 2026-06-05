@@ -19,7 +19,19 @@
       "WebFetch(domain:github.com)",
       "Bash(conda info *)",
       "Bash(ruff --version)",
-      "Bash(uvx ruff *)"
+      "Bash(uvx ruff *)",
+      "Bash(nvidia-smi *)",
+      "Bash(ps -eo pid,ppid,pcpu,pmem,etime,comm)",
+      "Bash(awk '{print \"PID:\", $2, \"已运行:\", $10, \"CPU:\", $3\"%\", \"MEM:\", $4\"%\", \"命令:\", $11, $12}')",
+      "Bash(awk '{print $2, $11, $12, $13, $14}')",
+      "Bash(nohup bash -c ' *)",
+      "Bash(echo \"GPU3 重启，PID=$!\")",
+      "Bash(awk '{print $1, $2, $11, $12, $13, $14, $15}')",
+      "Bash(awk '{print $1, $4}')",
+      "Bash(grep -v \"^$\")",
+      "Bash(awk '{print $2, $11, $12, $13, $14, $15}')",
+      "Bash(mkdir -p /root/workspace/python/jg-race/data/run_0603/1dyg_dataset1_v2/dataset1)",
+      "Bash(echo \"Test inference PID: $!\")"
     ]
   }
 }

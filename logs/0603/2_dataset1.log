@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/root/workspace/python/jg-race/2DyGFormer_v2.py", line 13, in <module>
+    import jittor as jt
+ModuleNotFoundError: No module named 'jittor'
+[2DyGFormer_v2 DONE]

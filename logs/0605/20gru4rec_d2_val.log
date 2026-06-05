@@ -1,0 +1,47 @@
+[38;5;2m[i 0605 08:48:32.919466 68 compiler.py:955] Jittor(1.3.11.0) src: /opt/miniconda/envs/rtdetr_env/lib/python3.7/site-packages/jittor[m
+[38;5;2m[i 0605 08:48:32.928436 68 compiler.py:956] g++ at /usr/bin/g++(11.4.0)[m
+[38;5;2m[i 0605 08:48:32.928563 68 compiler.py:957] cache_path: /root/.cache/jittor/jt1.3.11/g++11.4.0/py3.7.12/Linux-6.8.0-52x51/IntelRXeonRGolxc9/8289/default[m
+[38;5;2m[i 0605 08:48:32.934777 68 __init__.py:412] Found /usr/local/cuda/bin/nvcc(12.1.105) at /usr/local/cuda/bin/nvcc.[m
+[38;5;2m[i 0605 08:48:32.939612 68 __init__.py:412] Found addr2line(2.38) at /usr/bin/addr2line.[m
+[38;5;2m[i 0605 08:48:33.095147 68 compiler.py:1012] cuda key:cu12.1.105_sm_86[m
+[38;5;2m[i 0605 08:48:33.731053 68 __init__.py:227] Total mem: 124.54GB, using 16 procs for compiling.[m
+[38;5;2m[i 0605 08:48:33.868228 68 jit_compiler.cc:28] Load cc_path: /usr/bin/g++[m
+[38;5;2m[i 0605 08:48:33.960444 68 init.cc:63] Found cuda archs: [86,][m
+[38;5;2m[i 0605 08:48:35.098633 68 cuda_flags.cc:55] CUDA enabled.[m
+================================================================================
+20GRU4Rec [InfoNCE+WeightDecay+RNN] - Dataset: dataset2
+  seq_len=64, hidden=128, n_layers=2, n_heads=2
+  num_neg=15, p_pop=0.7, lr=0.001
+  use_all_train=False
+================================================================================
+split 列: train=1995088, val=266195
+max_item_id=110369  (embedding table size=110370)
+Building user history...
+  Users with history: 12708, avg history len: 177.9
+Node/edge info: 12708 users, max_item=110369, train_edges=1995088
+GRU4Rec params: 14,325,504
+
+InfoNCE training: K=15, simulating 16-way ranking
+Epoch 1:   0%|                                                                                 | 0/7794 [00:00<?, ?it/s]
+Compiling Operators(22/22) used: 5.31s eta:    0s 
+
+Compiling Operators(45/54) used: 4.31s eta: 0.862s Compiling Operators(47/54) used: 5.31s eta: 0.791s Compiling Operators(54/54) used: 6.31s eta:    0s 
+Epoch 1:   0%|                                                                                 | 0/7794 [00:12<?, ?it/s]
+Traceback (most recent call last):
+  File "20GRU4Rec.py", line 627, in <module>
+    args.seq_len, user_history, args.early_stop)
+  File "20GRU4Rec.py", line 344, in train
+    jt.sync_all()
+RuntimeError: [38;5;1m[f 0605 08:48:55.396502 68 executor.cc:686] 
+Execute fused operator(148/360) failed.[OP TYPE]: array 
+[Input]: 
+[Output]: int32[256,], 
+[Async Backtrace]: not found, please set env JT_SYNC=1, trace_py_var=3 
+[Reason]: [38;5;1m[f 0605 08:48:55.379757 68 helper_cuda.h:128] CUDA error at /opt/miniconda/envs/rtdetr_env/lib/python3.7/site-packages/jittor/src/executor.cc:589  code=700( cudaErrorIllegalAddress ) cudaDeviceSynchronize()[m[m
+**********
+Async error was detected. To locate the async backtrace and get better error report, please rerun your code with two enviroment variables set:
+>>> export JT_SYNC=1
+>>> export trace_py_var=3
+
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  [38;5;1m[f 0605 08:48:56.211074 68 helper_cuda.h:128] CUDA error at /opt/miniconda/envs/rtdetr_env/lib/python3.7/site-packages/jittor/extern/cuda/cudnn/src/cudnn_wrapper.cc:34  code=4( CUDNN_STATUS_INTERNAL_ERROR ) cudnnDestroy(cudnn_handle)[m

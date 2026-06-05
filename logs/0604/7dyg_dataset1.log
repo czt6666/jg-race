@@ -1,0 +1,153 @@
+[38;5;2m[i 0604 13:32:42.853625 28 compiler.py:955] Jittor(1.3.11.0) src: /opt/miniconda/envs/rtdetr_env/lib/python3.7/site-packages/jittor[m
+[38;5;2m[i 0604 13:32:42.858962 28 compiler.py:956] g++ at /usr/bin/g++(11.4.0)[m
+[38;5;2m[i 0604 13:32:42.859044 28 compiler.py:957] cache_path: /root/.cache/jittor/jt1.3.11/g++11.4.0/py3.7.12/Linux-6.8.0-52x51/IntelRXeonRGolxc9/8289/default[m
+[38;5;2m[i 0604 13:32:42.865694 28 __init__.py:412] Found /usr/local/cuda/bin/nvcc(12.1.105) at /usr/local/cuda/bin/nvcc.[m
+[38;5;2m[i 0604 13:32:42.871070 28 __init__.py:412] Found addr2line(2.38) at /usr/bin/addr2line.[m
+[38;5;2m[i 0604 13:32:43.031086 28 compiler.py:1012] cuda key:cu12.1.105_sm_86[m
+[38;5;2m[i 0604 13:32:43.729214 28 __init__.py:227] Total mem: 124.54GB, using 16 procs for compiling.[m
+[38;5;2m[i 0604 13:32:43.847143 28 jit_compiler.cc:28] Load cc_path: /usr/bin/g++[m
+[38;5;2m[i 0604 13:32:43.985227 28 init.cc:63] Found cuda archs: [86,][m
+[38;5;2m[i 0604 13:32:45.186487 28 cuda_flags.cc:55] CUDA enabled.[m
+================================================================================
+7DyGFormer [InfoNCE] - Dataset: dataset1
+  num_neg=19, p_pop=0.5, max_seq_len=32
+  use_all_train=False
+================================================================================
+85/15 split: train=587221, val=103627
+Pop feature: 23852 节点有非零特征，最大值=7.82
+Node size: 43215, Edges: 690848, Bipartite: False
+[38;5;3m[w 0604 13:32:49.493465 28 nn.py:2419]  The `Parameter` interface isn't needed in Jittor, this interface
+does nothings and it is just used for compatible.
+    
+A Jittor Var is a Parameter
+when it is a member of Module, if you don't want a Jittor
+Var menber is treated as a Parameter, just name it startswith
+underscore `_`.
+    [m
+[38;5;3m[w 0604 13:32:49.909781 28 nn.py:2419]  The `Parameter` interface isn't needed in Jittor, this interface
+does nothings and it is just used for compatible.
+    
+A Jittor Var is a Parameter
+when it is a member of Module, if you don't want a Jittor
+Var menber is treated as a Parameter, just name it startswith
+underscore `_`.
+    [m
+[38;5;3m[w 0604 13:32:49.910818 28 nn.py:2419]  The `Parameter` interface isn't needed in Jittor, this interface
+does nothings and it is just used for compatible.
+    
+A Jittor Var is a Parameter
+when it is a member of Module, if you don't want a Jittor
+Var menber is treated as a Parameter, just name it startswith
+underscore `_`.
+    [m
+[38;5;3m[w 0604 13:32:49.911106 28 nn.py:2419]  The `Parameter` interface isn't needed in Jittor, this interface
+does nothings and it is just used for compatible.
+    
+A Jittor Var is a Parameter
+when it is a member of Module, if you don't want a Jittor
+Var menber is treated as a Parameter, just name it startswith
+underscore `_`.
+    [m
+
+InfoNCE training: K=19 negatives/positive, simulating 20-way ranking
+Epoch 1:   0%|                                                                                 | 0/2937 [00:00<?, ?it/s]
+Compiling Operators(67/79) used: 4.31s eta: 0.772s Compiling Operators(78/79) used: 5.31s eta: 0.0681s Compiling Operators(79/79) used: 6.31s eta:    0s 
+Epoch 1 loss=3.0059:   0%|                                                                     | 0/2937 [00:08<?, ?it/s]Epoch 1 loss=3.0059:   0%|                                                           | 1/2937 [00:08<7:00:22,  8.59s/it]Epoch 1 loss=2.9495:   0%|                                                           | 1/2937 [00:10<7:00:22,  8.59s/it]Epoch 1 loss=2.9495:   0%|                                                           | 2/2937 [00:10<3:39:59,  4.50s/it]Epoch 1 loss=2.8605:   0%|                                                           | 2/2937 [00:11<3:39:59,  4.50s/it]Epoch 1 loss=2.8605:   0%|                                                           | 3/2937 [00:11<2:39:08,  3.25s/it]Epoch 1 loss=2.7324:   0%|                                                           | 3/2937 [00:13<2:39:08,  3.25s/it]Epoch 1 loss=2.7324:   0%|                                                           | 4/2937 [00:13<2:07:12,  2.60s/it]Epoch 1 loss=2.5826:   0%|                                                           | 4/2937 [00:15<2:07:12,  2.60s/it]Epoch 1 loss=2.5826:   0%|                                                           | 5/2937 [00:15<1:54:31,  2.34s/it][38;5;2m[i 0604 13:33:07.203308 28 cuda_device_allocator.cc:30] 
+=== display_memory_info ===
+ total_cpu_ram: 124.5GB total_device_ram: 23.69GB
+ hold_vars: 262 lived_vars: 16021 lived_ops: 15602
+ name: sfrl is_device: 1 used: 19.49GB(83.9%) unused:  3.75GB(16.1%) ULB: 16.25MB ULBO:    60MB total: 23.24GB
+ name: sfrl is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used: 10.84MB(1.45%) unused: 737.2MB(98.6%) ULB:   338MB ULBO:   338MB total:   748MB
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 1 used:     0 B(0%) unused:   1.5KB(100%) total:   1.5KB
+ cpu&gpu: 23.97GB gpu: 23.24GB cpu:   748MB
+ free: cpu(15.76GB) gpu(41.94MB)
+ swap: total(    0 B) last(    0 B)
+===========================
+[m
+Epoch 1 loss=2.4319:   0%|                                                           | 5/2937 [00:17<1:54:31,  2.34s/it]Epoch 1 loss=2.4319:   0%|                                                           | 6/2937 [00:17<1:50:53,  2.27s/it]Epoch 1 loss=2.0452:   0%|                                                           | 6/2937 [00:19<1:50:53,  2.27s/it]Epoch 1 loss=2.0452:   0%|▏                                                          | 7/2937 [00:19<1:41:57,  2.09s/it][38;5;2m[i 0604 13:33:11.163111 28 cuda_device_allocator.cc:30] 
+=== display_memory_info ===
+ total_cpu_ram: 124.5GB total_device_ram: 23.69GB
+ hold_vars: 265 lived_vars: 17592 lived_ops: 17233
+ name: sfrl is_device: 1 used: 21.44GB(92%) unused: 1.862GB(7.99%) ULB:    23MB ULBO:    98MB total:  23.3GB
+ name: sfrl is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used: 10.85MB(47.2%) unused: 12.15MB(52.8%) ULB: 2.364MB ULBO:     5MB total:    23MB
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 1 used:     0 B(0%) unused:   1.5KB(100%) total:   1.5KB
+ cpu&gpu: 23.32GB gpu:  23.3GB cpu:    23MB
+ free: cpu(17.16GB) gpu(21.94MB)
+ swap: total(    0 B) last(    0 B)
+===========================
+[m
+[38;5;2m[i 0604 13:33:11.171900 28 cuda_device_allocator.cc:30] 
+=== display_memory_info ===
+ total_cpu_ram: 124.5GB total_device_ram: 23.69GB
+ hold_vars: 265 lived_vars: 17592 lived_ops: 17233
+ name: sfrl is_device: 1 used: 21.54GB(92.9%) unused: 1.648GB(7.11%) ULB:    23MB ULBO:    98MB total: 23.19GB
+ name: sfrl is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used: 10.85MB(51.7%) unused: 10.15MB(48.3%) ULB: 2.364MB ULBO:     5MB total:    21MB
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ cpu&gpu: 23.21GB gpu: 23.19GB cpu:    21MB
+ free: cpu(17.16GB) gpu(97.94MB)
+ swap: total(    0 B) last(    0 B)
+===========================
+[m
+[38;5;2m[i 0604 13:33:11.172140 28 cuda_device_allocator.cc:30] 
+=== display_memory_info ===
+ total_cpu_ram: 124.5GB total_device_ram: 23.69GB
+ hold_vars: 265 lived_vars: 17592 lived_ops: 17233
+ name: sfrl is_device: 1 used: 21.54GB(92.9%) unused: 1.648GB(7.11%) ULB:    23MB ULBO:    98MB total: 23.19GB
+ name: sfrl is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used: 10.85MB(51.7%) unused: 10.15MB(48.3%) ULB: 2.364MB ULBO:     5MB total:    21MB
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ cpu&gpu: 23.21GB gpu: 23.19GB cpu:    21MB
+ free: cpu(17.16GB) gpu(97.94MB)
+ swap: total(    0 B) last(    0 B)
+===========================
+[m
+[38;5;1m[e 0604 13:33:11.172228 28 executor.cc:682] 
+=== display_memory_info ===
+ total_cpu_ram: 124.5GB total_device_ram: 23.69GB
+ hold_vars: 265 lived_vars: 17592 lived_ops: 17233
+ name: sfrl is_device: 1 used: 21.54GB(92.9%) unused: 1.648GB(7.11%) ULB:    23MB ULBO:    98MB total: 23.19GB
+ name: sfrl is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: sfrl is_device: 0 used: 10.85MB(51.7%) unused: 10.15MB(48.3%) ULB: 2.364MB ULBO:     5MB total:    21MB
+ name: sfrl is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 0 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ name: temp is_device: 1 used:     0 B(-nan%) unused:     0 B(-nan%) total:     0 B
+ cpu&gpu: 23.21GB gpu: 23.19GB cpu:    21MB
+ free: cpu(17.16GB) gpu(97.94MB)
+ swap: total(    0 B) last(    0 B)
+===========================
+[m
+Epoch 1 loss=2.0452:   0%|▏                                                          | 7/2937 [00:20<2:24:17,  2.95s/it]
+Traceback (most recent call last):
+  File "7DyGFormer.py", line 515, in <module>
+    neg_chunk=args.neg_chunk)
+  File "7DyGFormer.py", line 236, in train
+    jt.sync_all()
+RuntimeError: Wrong inputs arguments, Please refer to examples(help(jt.sync_all)).
+
+Types of your inputs are:
+ self	= module,
+ args	= (),
+
+The function declarations are:
+ void sync_all(bool device_sync=false)
+
+Failed reason:[38;5;1m[f 0604 13:33:11.172273 28 mem_info.cc:272] 
+*******************
+GPU memory is overflow, please reduce your batch_size or data size!
+Total: 23.69GB Used: 23.19GB[m
