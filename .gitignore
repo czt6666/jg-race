@@ -4,6 +4,10 @@ result/
 result.zip
 data/
 
+# Logs and model checkpoints (large files, generated artifacts)
+logs/
+saved_models/
+
 # Python
 __pycache__/
 *.py[cod]
