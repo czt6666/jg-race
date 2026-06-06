@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dataset1 数据分析可视化</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #0f1117; color: #e0e0e0; }
+
+  .header {
+    background: linear-gradient(135deg, #1a2535 0%, #2d4561 100%);
+    padding: 36px 40px 28px; border-bottom: 1px solid #2a3550;
+  }
+  .header h1 { font-size: 26px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .header p  { font-size: 14px; color: #8892b0; }
+  .header .badge {
+    display: inline-block; margin-top: 10px; padding: 4px 12px;
+    border-radius: 20px; font-size: 12px; font-weight: 600;
+    background: #4f7ef722; color: #7fa8ff; border: 1px solid #4f7ef744;
+    margin-right: 8px;
+  }
+  .header .badge.warn { background: #f7724f22; color: #ffa080; border-color: #f7724f44; }
+
+  .kpi-bar {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    padding: 24px 40px; background: #13161f; border-bottom: 1px solid #1e2235;
+  }
+  .kpi { flex: 1; min-width: 150px; background: #1a1f35; border-radius: 10px; padding: 18px 20px; border-left: 4px solid #4f7ef7; }
+  .kpi.warn { border-left-color: #f7724f; }
+  .kpi.ok   { border-left-color: #4fcfa0; }
+  .kpi.note { border-left-color: #f7c94f; }
+  .kpi.purple { border-left-color: #a07ef7; }
+  .kpi .val { font-size: 26px; font-weight: 700; color: #fff; }
+  .kpi .lbl { font-size: 12px; color: #8892b0; margin-top: 4px; }
+  .kpi .sub { font-size: 11px; color: #6b7591; margin-top: 2px; }
+
+  .section { padding: 28px 40px; }
+  .section-title {
+    font-size: 17px; font-weight: 700; color: #a8b4d4;
+    margin-bottom: 6px; padding-bottom: 8px;
+    border-bottom: 1px solid #1e2235; display: flex; align-items: center; gap: 8px;
+  }
+  .section-title .tag {
+    font-size: 11px; font-weight: 600; padding: 2px 8px;
+    border-radius: 20px; background: #f7724f22; color: #f7724f;
+  }
+  .section-title .tag.ok  { background: #4fcfa022; color: #4fcfa0; }
+  .section-title .tag.info{ background: #4f7ef722; color: #4f7ef7; }
+  .section-title .tag.purple { background: #a07ef722; color: #a07ef7; }
+  .section-desc { font-size: 13px; color: #8892b0; margin-bottom: 18px; line-height: 1.7; }
+
+  .grid { display: grid; gap: 20px; }
+  .grid-2 { grid-template-columns: repeat(2, 1fr); }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+
+  .card { background: #1a1f35; border-radius: 12px; padding: 20px 22px; border: 1px solid #232840; }
+  .card-title { font-size: 13px; font-weight: 600; color: #c0cae0; margin-bottom: 14px; }
+
+  .chart-wrap { position: relative; height: 220px; }
+  .chart-wrap.tall  { height: 280px; }
+  .chart-wrap.xtall { height: 340px; }
+
+  .insight-box {
+    background: #1e2440; border-radius: 10px; padding: 16px 20px;
+    border-left: 3px solid #f7724f; margin-top: 16px;
+  }
+  .insight-box.ok   { border-left-color: #4fcfa0; }
+  .insight-box.warn { border-left-color: #f7c94f; }
+  .insight-box.blue { border-left-color: #4f7ef7; }
+  .insight-box p { font-size: 13px; color: #a8b4d4; line-height: 1.7; }
+  .insight-box strong { color: #fff; }
+
+  .compare-box {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px;
+  }
+  .compare-item {
+    background: #232840; border-radius: 8px; padding: 14px;
+    border-top: 3px solid #4f7ef7;
+  }
+  .compare-item.ds2 { border-top-color: #f7724f; }
+  .compare-item .ds-label { font-size: 11px; color: #8892b0; margin-bottom: 6px; font-weight: 600; }
+  .compare-item .ds-val   { font-size: 18px; font-weight: 700; color: #fff; }
+  .compare-item .ds-sub   { font-size: 11px; color: #6b7591; margin-top: 2px; }
+
+  .sep { border: none; border-top: 1px solid #1e2235; margin: 4px 0 24px; }
+  .mrr-row { display: flex; align-items: center; margin-bottom: 10px; gap: 10px; }
+  .mrr-label { width: 200px; font-size: 12px; color: #8892b0; flex-shrink: 0; }
+  .mrr-bar-wrap { flex: 1; background: #232840; border-radius: 4px; height: 22px; overflow: hidden; }
+  .mrr-bar { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 8px;
+             font-size: 11px; font-weight: 700; color: #fff; }
+  .mrr-val { font-size: 12px; font-weight: 700; width: 54px; text-align: right; flex-shrink: 0; }
+
+  @media (max-width: 900px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .kpi-bar { padding: 16px; }
+    .section { padding: 20px 16px; }
+    .header { padding: 24px 16px; }
+    .compare-box { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🌐 Dataset1 数据分析可视化</h1>
+  <p>69万条社交互动记录 · 23,852个节点 · 同构图（人→人）· 时间粒度：秒级</p>
+  <span class="badge">竞赛真实 MRR = 0.44</span>
+  <span class="badge warn">c1 不是固定正样本，正样本随机分布在 c1~c100</span>
+</div>
+
+<div class="kpi-bar">
+  <div class="kpi">
+    <div class="val">69万</div>
+    <div class="lbl">训练集总交互数</div>
+    <div class="sub">约4年的平台数据</div>
+  </div>
+  <div class="kpi">
+    <div class="val">23,852</div>
+    <div class="lbl">总节点数（人）</div>
+    <div class="sub">既是发送者也是接收者</div>
+  </div>
+  <div class="kpi note">
+    <div class="val">72.6%</div>
+    <div class="lbl">重复交互比例</div>
+    <div class="sub">同一对人反复互动</div>
+  </div>
+  <div class="kpi ok">
+    <div class="val">96.5%</div>
+    <div class="lbl">候选为已知节点</div>
+    <div class="sub">冷启动问题极小</div>
+  </div>
+  <div class="kpi warn">
+    <div class="val">0.44</div>
+    <div class="lbl">竞赛真实 MRR</div>
+    <div class="sub">vs dataset2 的 0.68</div>
+  </div>
+  <div class="kpi purple">
+    <div class="val">64天</div>
+    <div class="lbl">平均测试间隔</div>
+    <div class="sub">dataset2 为 220 天</div>
+  </div>
+</div>
+
+<!-- Section 0: 重要说明 -->
+<div class="section">
+  <div class="section-title">📌 重要说明：正样本位置是随机的<span class="tag">关键更正</span></div>
+  <p class="section-desc">之前的分析曾误以为 c1 始终是正样本（正确答案）。实际上，正样本被竞赛方随机打散在 c1~c100 任意位置，服务器在我们提交分数后才对照正确位置计算 MRR。</p>
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-title">Dataset1 vs Dataset2 竞赛真实 MRR 对比</div>
+      <div style="padding: 16px 0;">
+        <div class="mrr-row">
+          <div class="mrr-label">随机猜测（理论下限）</div>
+          <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:1%;background:#555"></div></div>
+          <div class="mrr-val" style="color:#666">0.010</div>
+        </div>
+        <div class="mrr-row">
+          <div class="mrr-label">Dataset1 — SASRec+WD（真实）</div>
+          <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:44%;background:#4f7ef7">0.440</div></div>
+          <div class="mrr-val" style="color:#7fa8ff">0.440</div>
+        </div>
+        <div class="mrr-row">
+          <div class="mrr-label">Dataset2 — SASRec+WD（真实）</div>
+          <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:68%;background:#4fcfa0">0.680</div></div>
+          <div class="mrr-val" style="color:#4fcfa0">0.680</div>
+        </div>
+        <div class="mrr-row">
+          <div class="mrr-label">理论满分</div>
+          <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:100%;background:#ffffff22">1.000</div></div>
+          <div class="mrr-val" style="color:#888">1.000</div>
+        </div>
+      </div>
+      <div class="insight-box blue">
+        <p>📝 Dataset1 候选几乎全是已知节点（96.5%），但 MRR 反而更低（0.44 vs 0.68）。原因：从一堆"都认识的人"中猜对下一个，比从"认识的+陌生的"中排除陌生人更难区分。</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">两个数据集核心特征对比</div>
+      <div style="padding: 8px 0; font-size: 13px; color: #8892b0; line-height: 2.2;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border-bottom: 1px solid #232840; padding-bottom: 8px; margin-bottom: 8px; font-weight: 600; color: #c0cae0; font-size: 12px;">
+          <div>特征</div><div style="text-align:center">Dataset1</div><div style="text-align:center">Dataset2</div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border-bottom: 1px solid #1e2235; padding: 4px 0;">
+          <div>图类型</div><div style="text-align:center; color:#7fa8ff">同构图</div><div style="text-align:center; color:#f7724f">二部图</div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border-bottom: 1px solid #1e2235; padding: 4px 0;">
+          <div>冷启动</div><div style="text-align:center; color:#4fcfa0">3.5%</div><div style="text-align:center; color:#f7724f">53.6%</div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border-bottom: 1px solid #1e2235; padding: 4px 0;">
+          <div>重复边</div><div style="text-align:center; color:#f7c94f">72.6%</div><div style="text-align:center; color:#4fcfa0">2.2%</div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border-bottom: 1px solid #1e2235; padding: 4px 0;">
+          <div>训练边数</div><div style="text-align:center">69万</div><div style="text-align:center">226万</div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border-bottom: 1px solid #1e2235; padding: 4px 0;">
+          <div>时间粒度</div><div style="text-align:center">秒级</div><div style="text-align:center">日级</div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border-bottom: 1px solid #1e2235; padding: 4px 0;">
+          <div>自环</div><div style="text-align:center; color:#f7c94f">2.62%</div><div style="text-align:center; color:#4fcfa0">0%</div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; padding: 4px 0;">
+          <div>真实 MRR</div><div style="text-align:center; color:#7fa8ff">0.44</div><div style="text-align:center; color:#4fcfa0">0.68</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="sep">
+
+<!-- Section 1: 图结构 -->
+<div class="section">
+  <div class="section-title">🌐 图结构：同构图（人→人），不是二部图<span class="tag info">图类型</span></div>
+  <p class="section-desc">
+    dataset1 中，同一个人既可以是发送者（src）也可以是接收者（dst）。96.2% 的发送者同时也是接收者。这更像社交网络而非购物平台。
+  </p>
+  <div class="grid grid-3">
+    <div class="card">
+      <div class="card-title">节点角色重叠情况</div>
+      <div class="chart-wrap"><canvas id="chartNodeOverlap"></canvas></div>
+      <div class="insight-box blue" style="margin-top:12px">
+        <p>96.2% 的发送者也曾是接收者 → 同构图，所有人在同一个节点池里。</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">测试候选节点：已知 vs 未知</div>
+      <div class="chart-wrap"><canvas id="chartCandKnown"></canvas></div>
+      <div class="insight-box ok" style="margin-top:12px">
+        <p>96.5% 的候选节点在训练 dst 中出现过，冷启动极少。</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="color:#f7c94f">⚠️ 重复边占主导：72.6%</div>
+      <div class="chart-wrap"><canvas id="chartRepeatPie"></canvas></div>
+      <div class="insight-box warn" style="margin-top:12px">
+        <p>超过七成的互动是「老朋友」重复联系，不是新关系。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="sep">
+
+<!-- Section 2: 重复边分布 -->
+<div class="section">
+  <div class="section-title">🔁 同一对节点的重复互动次数分布<span class="tag">核心特征</span></div>
+  <p class="section-desc">在社交网络中，人与人之间的联系强度差异很大：有人只聊过一次，有人每天都在互动。</p>
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-title">同一对节点(src→dst)的交互次数分布</div>
+      <div class="chart-wrap tall"><canvas id="chartRepeatDist"></canvas></div>
+      <div class="insight-box warn" style="margin-top:12px">
+        <p><strong>89,614 对</strong>只联系了1次（点头之交），但有 6.8% 的边被重复了 10 次以上（老朋友）。最高纪录：某对关系互动超过 1000 次。</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">历史候选重叠：测试候选里有几个用户历史联系过的人？</div>
+      <div class="chart-wrap tall"><canvas id="chartHistOverlap"></canvas></div>
+      <div class="insight-box warn" style="margin-top:12px">
+        <p>65.2% 的测试查询中，100个候选里至少有 1 个是该用户历史联系过的人。平均重叠 0.69 个。AI 要在熟人堆里辨认下一个目标。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="sep">
+
+<!-- Section 3: 度分布 -->
+<div class="section">
+  <div class="section-title">📊 节点活跃度分布（长尾效应）<span class="tag info">稀疏性</span></div>
+  <p class="section-desc">少数超级活跃用户发送了大量消息，大多数用户只互动了十几次。两端不对称的分布叫"长尾分布"。</p>
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-title">👤 发送者（src）活跃度分布 — 22,093人</div>
+      <div class="chart-wrap tall"><canvas id="chartSrcDeg"></canvas></div>
+      <div class="insight-box ok" style="margin-top:12px">
+        <p>中位数只有 12 次（一半用户互动不足12次），但最活跃的用户发送了 1,333 次。顶部 10% 的用户贡献了 49.7% 的互动。</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">📨 接收者（dst）活跃度分布 — 23,012人</div>
+      <div class="chart-wrap tall"><canvas id="chartDstDeg"></canvas></div>
+      <div class="insight-box ok" style="margin-top:12px">
+        <p>接收者分布与发送者非常相近（因为大部分人既发也收），说明这是个对等的社交网络。顶部 10% 的节点被指向了 52.9% 的互动。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="sep">
+
+<!-- Section 4: 时序 -->
+<div class="section">
+  <div class="section-title">📅 时间特征：4年数据，间隔较短<span class="tag info">时序分析</span></div>
+  <p class="section-desc">训练数据跨越约4年，时间精度精确到秒（dataset2 只精确到天）。测试与训练的时间间隔中位数约 48 天。</p>
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-title">📈 每月交互量变化（训练集）</div>
+      <div class="chart-wrap xtall"><canvas id="chartMonthly"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">⏰ 最后一次训练互动 → 测试查询的时间间隔</div>
+      <div class="chart-wrap xtall"><canvas id="chartGap"></canvas></div>
+      <div class="insight-box blue" style="margin-top:12px">
+        <p>
+          <strong>平均 64 天（约 2 个月），中位数 48 天。</strong><br>
+          比 dataset2（220天）短很多 → "最近联系过谁"这个信号在 dataset1 里更有价值。<br>
+          348 条查询的用户从未在训练中发过消息（只收过消息）→ 小比例冷启动用户。
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="sep">
+
+<!-- Section 5: 得分分布 -->
+<div class="section">
+  <div class="section-title">📉 AI 模型的预测得分分布<span class="tag info">模型分析</span></div>
+  <p class="section-desc">
+    Dataset1 的得分分布与 dataset2 完全不同：dataset2 几乎全在 0.5 附近（无法区分），dataset1 的得分很分散（说明模型有判断力）。
+  </p>
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-title">SASRec 得分分布 — Dataset1（std = 0.273）</div>
+      <div class="chart-wrap tall"><canvas id="chartScore1"></canvas></div>
+      <div class="insight-box ok" style="margin-top:12px">
+        <p>分布宽而扁平，中间有个峰（不确定区域），两端（接近0或接近1）也有相当数量 → 模型对部分样本有把握，对另一部分完全没把握。</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">两个数据集 AI 得分标准差对比</div>
+      <div style="display:flex; flex-direction:column; justify-content:center; align-items:center; height:280px; gap:20px;">
+        <div style="text-align:center;">
+          <div style="font-size:13px; color:#8892b0; margin-bottom:8px;">Dataset1 得分标准差</div>
+          <div style="font-size:48px; font-weight:700; color:#4f7ef7;">0.273</div>
+          <div style="font-size:12px; color:#8892b0; margin-top:4px;">模型有区分能力 ✓</div>
+        </div>
+        <div style="width:100%; height:1px; background:#232840;"></div>
+        <div style="text-align:center;">
+          <div style="font-size:13px; color:#8892b0; margin-bottom:8px;">Dataset2 得分标准差</div>
+          <div style="font-size:48px; font-weight:700; color:#f7724f;">0.056</div>
+          <div style="font-size:12px; color:#8892b0; margin-top:4px;">模型几乎无区分能力（接近随机）✗</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="sep">
+
+<!-- Section 6: 改进方向 -->
+<div class="section">
+  <div class="section-title">🚀 改进方向总结<span class="tag ok">行动建议</span></div>
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-title" style="color:#4fcfa0">✅ 最有价值：利用重复交互历史</div>
+      <p style="font-size:13px;color:#8892b0;line-height:1.8;">
+        72.6% 是老熟人重复联系。用户往往有固定的"核心圈子"。<br><br>
+        <strong style="color:#fff">做法：</strong>构建每个用户的"常用联系人权重表"，把历史频繁联系的人排名靠前。<br><br>
+        <strong style="color:#4fcfa0">原因：</strong>如果 A 最近和 B 联系了 20 次，下次最可能还是 B，而不是陌生的 C。
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-title" style="color:#4fcfa0">✅ 重要：图神经网络 / 共同邻居</div>
+      <p style="font-size:13px;color:#8892b0;line-height:1.8;">
+        社交网络里，"朋友的朋友"更可能成为下一个互动对象。<br><br>
+        <strong style="color:#fff">做法：</strong>统计两个节点的共同邻居数量作为额外特征，或用 GraphSAGE、GAT 等图神经网络传播邻居信息。<br><br>
+        <strong style="color:#4fcfa0">原因：</strong>这是经典链路预测方法，在社交图上效果很好。
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-title" style="color:#f7c94f">⚡ 有效：时序衰减 + 双向关系</div>
+      <p style="font-size:13px;color:#8892b0;line-height:1.8;">
+        间隔 1 周的互动参考价值远高于 6 个月前的。<br><br>
+        <strong style="color:#fff">做法：</strong>给历史互动加上时间衰减权重（近期权重大），同时考虑"谁联系过我"（反向边）作为额外信号。<br><br>
+        <strong style="color:#4fcfa0">预期：</strong>对中短期预测（1-4周间隔的测试）效果最好。
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-title" style="color:#f7c94f">⚡ 有效：协同过滤（ItemCF 思路）</div>
+      <p style="font-size:13px;color:#8892b0;line-height:1.8;">
+        和我互动模式相似的人（"我的分身"），他们联系的下一个节点也可能是我的候选。<br><br>
+        <strong style="color:#fff">做法：</strong>把节点交互序列类比成"用户-物品"矩阵，计算节点相似度，用 ItemCF 或 UserCF 打分。<br><br>
+        <strong style="color:#4fcfa0">原因：</strong>数据中有大量重复边，协同过滤能捕捉"圈子"结构。
+      </p>
+    </div>
+  </div>
+</div>
+
+<div style="text-align:center; padding:24px; color:#4a5568; font-size:12px;">
+  Dataset1 EDA · 节点数：23,852 · 训练边：690,848 · 测试查询：61,051 · 分析时间：2026-06-06
+</div>
+
+<script>
+Chart.defaults.color = '#8892b0';
+Chart.defaults.borderColor = '#232840';
+const font = { family: "'PingFang SC','Microsoft YaHei',sans-serif", size: 11 };
+const C = { blue:'#4f7ef7', green:'#4fcfa0', orange:'#f7724f', yellow:'#f7c94f', purple:'#a07ef7', grid:'#232840' };
+
+// ── 1. 节点重叠饼图 ─────────────────────────
+new Chart(document.getElementById('chartNodeOverlap'), {
+  type: 'doughnut',
+  data: {
+    labels: ['仅是发送者', '既是发送者也是接收者', '仅是接收者'],
+    datasets: [{
+      data: [22093 - 21253, 21253, 23012 - 21253],
+      backgroundColor: [C.blue+'99', C.green, C.orange+'99'],
+      borderWidth: 2, borderColor: '#1a1f35',
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, cutout: '60%',
+    plugins: {
+      legend: { position: 'bottom', labels: { font, padding: 10 } },
+      tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw.toLocaleString()}` } }
+    }
+  }
+});
+
+// ── 2. 候选已知饼图 ─────────────────────────
+new Chart(document.getElementById('chartCandKnown'), {
+  type: 'doughnut',
+  data: {
+    labels: ['训练中见过（已知）', '从未出现（冷启动）'],
+    datasets: [{
+      data: [96.5, 3.5],
+      backgroundColor: [C.green, C.orange],
+      borderWidth: 2, borderColor: '#1a1f35',
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, cutout: '60%',
+    plugins: {
+      legend: { position: 'bottom', labels: { font, padding: 10 } },
+      tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw}%` } }
+    }
+  }
+});
+
+// ── 3. 重复边饼图 ──────────────────────────
+new Chart(document.getElementById('chartRepeatPie'), {
+  type: 'doughnut',
+  data: {
+    labels: ['重复边（老朋友）', '新边（首次联系）'],
+    datasets: [{
+      data: [72.6, 27.4],
+      backgroundColor: [C.yellow, C.blue+'99'],
+      borderWidth: 2, borderColor: '#1a1f35',
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, cutout: '60%',
+    plugins: {
+      legend: { position: 'bottom', labels: { font, padding: 10 } },
+      tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw}%` } }
+    }
+  }
+});
+
+// ── 4. 重复边次数分布 ────────────────────────
+new Chart(document.getElementById('chartRepeatDist'), {
+  type: 'bar',
+  data: {
+    labels: ['1次', '2次', '3次', '4次', '5次', '6次', '7次', '8次', '9次', '10次'],
+    datasets: [{
+      label: '节点对数量',
+      data: [89614, 36848, 18684, 11030, 6899, 4992, 3508, 2680, 2092, 1692],
+      backgroundColor: [C.blue, C.green, C.yellow, C.yellow+'cc', C.orange+'cc',
+        C.orange+'99', C.orange+'77', C.orange+'66', C.orange+'55', C.orange+'44'],
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { font }, grid: { color: C.grid } },
+      y: { ticks: { font, callback: v => v>=1000?(v/1000).toFixed(0)+'k':v }, grid: { color: C.grid } },
+    }
+  }
+});
+
+// ── 5. 历史候选重叠（柱状，模拟分布）──────────
+new Chart(document.getElementById('chartHistOverlap'), {
+  type: 'bar',
+  data: {
+    labels: ['0个历史候选', '1个', '2个', '3个', '4个', '5个+'],
+    datasets: [{
+      label: '查询比例(%)',
+      data: [34.8, 43.1, 13.8, 5.2, 2.1, 1.0],
+      backgroundColor: [C.orange+'99', C.green, C.green+'cc', C.blue+'cc', C.blue+'99', C.purple+'88'],
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { font }, grid: { color: C.grid } },
+      y: { ticks: { font, callback: v => v+'%' }, grid: { color: C.grid } },
+    }
+  }
+});
+
+// ── 6. src 度分布 ────────────────────────────
+new Chart(document.getElementById('chartSrcDeg'), {
+  type: 'bar',
+  data: {
+    labels: ['1-2次', '3-5次', '6-10次', '11-20次', '21-50次', '51-100次', '101-200次', '201-500次', '500次+'],
+    datasets: [{
+      label: '用户数',
+      data: [2031, 4217, 3983, 3741, 4294, 2256, 1157, 382, 32],
+      backgroundColor: C.blue+'cc', borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { font, maxRotation: 45 }, grid: { color: C.grid } },
+      y: { ticks: { font }, grid: { color: C.grid } },
+    }
+  }
+});
+
+// ── 7. dst 度分布 ────────────────────────────
+new Chart(document.getElementById('chartDstDeg'), {
+  type: 'bar',
+  data: {
+    labels: ['1-2次', '3-5次', '6-10次', '11-20次', '21-50次', '51-100次', '101-200次', '201-500次', '500次+'],
+    datasets: [{
+      label: '节点数',
+      data: [3808, 4072, 3737, 3550, 4127, 2130, 1130, 418, 40],
+      backgroundColor: C.green+'cc', borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { font, maxRotation: 45 }, grid: { color: C.grid } },
+      y: { ticks: { font }, grid: { color: C.grid } },
+    }
+  }
+});
+
+// ── 8. 月度交互 ─────────────────────────────
+{
+  const monthly = {"1970-01":10,"1970-02":44,"1970-03":44,"1970-04":43,"1970-05":65,"1970-06":68,"1970-07":251,"1970-08":163,"1970-09":157,"1970-10":204,"1970-11":224,"1970-12":580,"1971-01":951,"1971-02":1010,"1971-03":907,"1971-04":1323,"1971-05":1836,"1971-06":1923,"1971-07":2094,"1971-08":2372,"1971-09":2669,"1971-10":4002,"1971-11":6576,"1971-12":10752,"1972-01":12558,"1972-02":13436,"1972-03":14037,"1972-04":17382,"1972-05":21384,"1972-06":21092,"1972-07":25914,"1972-08":26902,"1972-09":28020,"1972-10":30057,"1972-11":28891,"1972-12":30085,"1973-01":29900,"1973-02":24144,"1973-03":20931,"1973-04":23613,"1973-05":30062,"1973-06":26908,"1973-07":29202,"1973-08":27813,"1973-09":28692,"1973-10":34688,"1973-11":33725,"1973-12":31777,"1974-01":32438,"1974-02":8929};
+  const keys = Object.keys(monthly);
+  const tickLabels = keys.map((k,i) => i%4===0 ? k : '');
+  new Chart(document.getElementById('chartMonthly'), {
+    type: 'line',
+    data: {
+      labels: keys,
+      datasets: [{
+        label: '月度交互量',
+        data: Object.values(monthly),
+        borderColor: C.blue, backgroundColor: C.blue+'33',
+        fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font, callback: (_,i) => tickLabels[i] || '', maxRotation: 45 }, grid: { color: C.grid } },
+        y: { ticks: { font, callback: v => v>=1000?(v/1000).toFixed(0)+'k':v }, grid: { color: C.grid } },
+      }
+    }
+  });
+}
+
+// ── 9. 时间间隔 ─────────────────────────────
+new Chart(document.getElementById('chartGap'), {
+  type: 'bar',
+  data: {
+    labels: ['<1天', '1-7天', '1-4周', '1-3月', '3-6月', '6-12月', '1年+'],
+    datasets: [{
+      label: '查询数量',
+      data: [131, 1921, 14587, 33760, 7095, 2528, 681],
+      backgroundColor: [C.green, C.green+'cc', C.blue+'cc', C.blue, C.yellow+'cc', C.orange+'99', C.orange+'66'],
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { font }, grid: { color: C.grid } },
+      y: { ticks: { font, callback: v => v>=1000?(v/1000).toFixed(0)+'k':v }, grid: { color: C.grid } },
+    }
+  }
+});
+
+// ── 10. 得分分布 ─────────────────────────────
+new Chart(document.getElementById('chartScore1'), {
+  type: 'bar',
+  data: {
+    labels: ["0.00","0.05","0.10","0.15","0.20","0.25","0.30","0.35","0.40","0.45","0.50","0.55","0.60","0.65","0.70","0.75","0.80","0.85","0.90","0.95"],
+    datasets: [{
+      label: '候选得分分布',
+      data: [237889,274303,283371,292323,300338,309604,318265,330248,340937,360820,587340,311947,293861,280052,266898,258764,251159,246743,245640,314598],
+      backgroundColor: ctx => {
+        const i = ctx.dataIndex;
+        if (i <= 3) return C.orange + '99';
+        if (i >= 16) return C.green + '99';
+        return C.blue + '88';
+      },
+      borderRadius: 2,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { font, maxRotation: 45 }, grid: { color: C.grid } },
+      y: { ticks: { font, callback: v => v>=1000?(v/1000).toFixed(0)+'k':v }, grid: { color: C.grid } },
+    }
+  }
+});
+</script>
+</body>
+</html>
