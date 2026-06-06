@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dataset2 数据分析可视化</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #0f1117; color: #e0e0e0; }
+
+  .header {
+    background: linear-gradient(135deg, #1a1f35 0%, #2d3561 100%);
+    padding: 36px 40px 28px;
+    border-bottom: 1px solid #2a3050;
+  }
+  .header h1 { font-size: 26px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .header p  { font-size: 14px; color: #8892b0; }
+
+  .kpi-bar {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    padding: 24px 40px; background: #13161f;
+    border-bottom: 1px solid #1e2235;
+  }
+  .kpi {
+    flex: 1; min-width: 160px;
+    background: #1a1f35; border-radius: 10px; padding: 18px 20px;
+    border-left: 4px solid #4f7ef7;
+  }
+  .kpi.warn { border-left-color: #f7724f; }
+  .kpi.ok   { border-left-color: #4fcfa0; }
+  .kpi.note { border-left-color: #f7c94f; }
+  .kpi .val { font-size: 28px; font-weight: 700; color: #fff; }
+  .kpi .lbl { font-size: 12px; color: #8892b0; margin-top: 4px; }
+  .kpi .sub { font-size: 11px; color: #6b7591; margin-top: 2px; }
+
+  .section { padding: 28px 40px; }
+  .section-title {
+    font-size: 17px; font-weight: 700; color: #a8b4d4;
+    margin-bottom: 6px; padding-bottom: 8px;
+    border-bottom: 1px solid #1e2235; display: flex; align-items: center; gap: 8px;
+  }
+  .section-title .tag {
+    font-size: 11px; font-weight: 600; padding: 2px 8px;
+    border-radius: 20px; background: #f7724f22; color: #f7724f;
+  }
+  .section-title .tag.ok  { background: #4fcfa022; color: #4fcfa0; }
+  .section-title .tag.info{ background: #4f7ef722; color: #4f7ef7; }
+  .section-desc { font-size: 13px; color: #8892b0; margin-bottom: 18px; line-height: 1.7; }
+
+  .grid { display: grid; gap: 20px; }
+  .grid-2 { grid-template-columns: repeat(2, 1fr); }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+
+  .card {
+    background: #1a1f35; border-radius: 12px; padding: 20px 22px;
+    border: 1px solid #232840;
+  }
+  .card-title { font-size: 13px; font-weight: 600; color: #c0cae0; margin-bottom: 14px; }
+
+  .chart-wrap { position: relative; height: 220px; }
+  .chart-wrap.tall { height: 280px; }
+  .chart-wrap.xtall { height: 340px; }
+
+  .insight-box {
+    background: #1e2440; border-radius: 10px; padding: 16px 20px;
+    border-left: 3px solid #f7724f; margin-top: 16px;
+  }
+  .insight-box.ok  { border-left-color: #4fcfa0; }
+  .insight-box.warn{ border-left-color: #f7c94f; }
+  .insight-box p { font-size: 13px; color: #a8b4d4; line-height: 1.7; }
+  .insight-box strong { color: #fff; }
+
+  .alert-big {
+    background: linear-gradient(135deg, #2d1a1a, #351a2d);
+    border: 1px solid #7c3030; border-radius: 12px;
+    padding: 20px 24px; margin: 0 0 20px;
+  }
+  .alert-big h3 { color: #f7724f; font-size: 15px; margin-bottom: 8px; }
+  .alert-big p  { color: #c8a0a0; font-size: 13px; line-height: 1.7; }
+
+  .mrr-row {
+    display: flex; align-items: center; margin-bottom: 10px; gap: 10px;
+  }
+  .mrr-label { width: 220px; font-size: 12px; color: #8892b0; flex-shrink: 0; }
+  .mrr-bar-wrap { flex: 1; background: #232840; border-radius: 4px; height: 22px; overflow: hidden; }
+  .mrr-bar { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 8px;
+             font-size: 11px; font-weight: 700; color: #fff; transition: width 0.6s; }
+  .mrr-val { font-size: 12px; font-weight: 700; width: 54px; text-align: right; flex-shrink: 0; }
+
+  .sep { border: none; border-top: 1px solid #1e2235; margin: 4px 0 24px; }
+
+  @media (max-width: 900px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .kpi-bar { padding: 16px 16px; }
+    .section { padding: 20px 16px; }
+    .header { padding: 24px 16px; }
+    .mrr-label { width: 140px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📚 Dataset2 数据分析可视化</h1>
+  <p>226万条购书记录 · 12,708位用户 · 50,640本书 · 训练期：2000-2011 · 测试期：2011-2012</p>
+</div>
+
+<!-- KPI Bar -->
+<div class="kpi-bar">
+  <div class="kpi">
+    <div class="val">226万</div>
+    <div class="lbl">训练集总交互数</div>
+    <div class="sub">跨越11年（2000-2011）</div>
+  </div>
+  <div class="kpi">
+    <div class="val">15.3万</div>
+    <div class="lbl">测试查询数</div>
+    <div class="sub">每条含100个候选书</div>
+  </div>
+  <div class="kpi warn">
+    <div class="val">53.5%</div>
+    <div class="lbl">答案是"神秘书"</div>
+    <div class="sub">训练中从未出现过</div>
+  </div>
+  <div class="kpi warn">
+    <div class="val">0.052</div>
+    <div class="lbl">真实测试 MRR</div>
+    <div class="sub">接近随机猜（0.01）</div>
+  </div>
+  <div class="kpi ok">
+    <div class="val">0.525</div>
+    <div class="lbl">本地自测 MRR</div>
+    <div class="sub">但与真实考试脱节</div>
+  </div>
+  <div class="kpi note">
+    <div class="val">220天</div>
+    <div class="lbl">平均时间间隔</div>
+    <div class="sub">最后一次训练→测试</div>
+  </div>
+</div>
+
+<!-- Section 1: 核心问题 -->
+<div class="section">
+  <div class="section-title">⚠️ 核心问题：自测和真实考试为什么差距这么大？<span class="tag">关键发现</span></div>
+  <p class="section-desc">
+    AI模型本地自测得了 <strong style="color:#4fcfa0">0.525分</strong>（约第2名），但真实测试只有 <strong style="color:#f7724f">0.052分</strong>（约第19名）。<br>
+    原因：自测题全是"学过的书"，真实考试有53.5%的答案是没学过的"神秘书"。
+  </p>
+
+  <div class="alert-big">
+    <h3>🚨 致命陷阱：本地验证集和真实测试集完全不一样</h3>
+    <p>
+      本地自测（split-1验证集）：答案 100% 是训练中出现过的书，负样本随机选取 → AI能认出答案，得高分 ✓<br>
+      真实测试集：答案 53.5% 是从未出现的神秘书，负样本精心构造与答案难度相同 → AI完全分不清 ✗<br><br>
+      <strong>结论：我们一直用"简单模拟题"来评估AI，但真正的考试是"难题"。</strong>
+    </p>
+  </div>
+
+  <!-- MRR对比 -->
+  <div class="card">
+    <div class="card-title">各方法 MRR 得分对比（满分=1.0，相当于每次都猜第1名）</div>
+    <div style="padding: 8px 0;">
+      <div class="mrr-row">
+        <div class="mrr-label">随机猜测（基准线）</div>
+        <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:1%;background:#555">0.010</div></div>
+        <div class="mrr-val" style="color:#888">0.010</div>
+      </div>
+      <div class="mrr-row">
+        <div class="mrr-label">按热门程度排序</div>
+        <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:5.63%;background:#7c6030">0.056</div></div>
+        <div class="mrr-val" style="color:#f7c94f">0.056</div>
+      </div>
+      <div class="mrr-row">
+        <div class="mrr-label">SASRec AI（真实测试）</div>
+        <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:5.18%;background:#7c3030">0.052</div></div>
+        <div class="mrr-val" style="color:#f7724f">0.052</div>
+      </div>
+      <div class="mrr-row">
+        <div class="mrr-label">SASRec inbatch（真实测试）</div>
+        <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:5.22%;background:#7c3040">0.052</div></div>
+        <div class="mrr-val" style="color:#f7724f">0.052</div>
+      </div>
+      <div class="mrr-row">
+        <div class="mrr-label">SASRec AI（本地自测）</div>
+        <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:52.5%;background:#2a6b4f">0.525</div></div>
+        <div class="mrr-val" style="color:#4fcfa0">0.525</div>
+      </div>
+      <div class="mrr-row">
+        <div class="mrr-label">SASRec + 去热度偏差（本地自测）</div>
+        <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:57.65%;background:#1a7a5a">0.577</div></div>
+        <div class="mrr-val" style="color:#4fcfa0">0.577</div>
+      </div>
+    </div>
+    <div class="insight-box warn" style="margin-top:12px">
+      <p>📝 <strong>大白话解释：</strong>真实测试中AI和「随机猜」几乎一样差。去热度偏差能大幅改善本地自测，但对真实测试的效果还需验证。</p>
+    </div>
+  </div>
+</div>
+
+<hr class="sep">
+
+<!-- Section 2: 冷启动 -->
+<div class="section">
+  <div class="section-title">❄️ 冷启动问题：神秘书占了一半多<span class="tag">核心难点</span></div>
+  <p class="section-desc">
+    "冷启动"= AI 没见过这本书，不知道它是什么，无法给它打分。测试里超过一半的正确答案都是这种"神秘书"。
+  </p>
+  <div class="grid grid-3">
+    <div class="card">
+      <div class="card-title">测试答案（c1）：已知 vs 神秘</div>
+      <div class="chart-wrap"><canvas id="chartColdKnown"></canvas></div>
+      <div class="insight-box" style="margin-top:12px">
+        <p>53.5% 的答案是训练中从未出现过的书——AI看到后完全懵了。</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">100个候选中：已知 vs 神秘构成</div>
+      <div class="chart-wrap"><canvas id="chartCandComp"></canvas></div>
+      <div class="insight-box" style="margin-top:12px">
+        <p>不管答案是已知还是神秘，100个候选里神秘书都有~54本，已知书~46本。</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">AI给书的打分（神秘书 vs 已知书）</div>
+      <div class="chart-wrap"><canvas id="chartScoreDist"></canvas></div>
+      <div class="insight-box" style="margin-top:12px">
+        <p>神秘书（橙色）和已知书（蓝色）的得分分布几乎完全重叠 → AI完全分不清。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="sep">
+
+<!-- Section 3: 时序 -->
+<div class="section">
+  <div class="section-title">📅 时间特征：11年训练数据的变迁<span class="tag info">时序分析</span></div>
+  <p class="section-desc">
+    训练数据从2000年开始，2007-2008年达到高峰，之后逐渐下滑。测试期是第12年（2011-2012）。
+  </p>
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-title">📈 每月交互量变化（训练集 2000-2011）</div>
+      <div class="chart-wrap xtall"><canvas id="chartMonthly"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">⏰ 最后一次购书到被测试的时间间隔</div>
+      <div class="chart-wrap xtall"><canvas id="chartGap"></canvas></div>
+      <div class="insight-box warn" style="margin-top:12px">
+        <p><strong>平均间隔220天（约7个月）</strong>：测试时用户已经很久没购书了，"最近看过什么"这个信号很弱。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="sep">
+
+<!-- Section 4: 用户/物品度分布 -->
+<div class="section">
+  <div class="section-title">📊 用户和书的购买量分布（贫富差距很大）<span class="tag info">稀疏性分析</span></div>
+  <p class="section-desc">
+    少数超级用户买了大量的书，大多数用户只买过很少几本。这种"长尾分布"在推荐系统里很常见。
+  </p>
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-title">👤 用户购书量分布（12,708位用户）</div>
+      <div class="chart-wrap tall"><canvas id="chartSrcDeg"></canvas></div>
+      <div class="insight-box ok" style="margin-top:12px">
+        <p>26.3% 的用户只买过1-5本书（冷清用户），但也有人买了上万本（土豪用户）。</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">📖 书的被购买量分布（50,640本书）</div>
+      <div class="chart-wrap tall"><canvas id="chartDstDeg"></canvas></div>
+      <div class="insight-box ok" style="margin-top:12px">
+        <p>27.3% 的书只被买过1-5次（冷门书），8.4% 是超过100次的畅销书。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="sep">
+
+<!-- Section 5: ID分布 -->
+<div class="section">
+  <div class="section-title">🔢 物品ID的规律：神秘书集中在低编号区<span class="tag">结构信号</span></div>
+  <p class="section-desc">
+    物品的编号（ID）不是随机的——编号小（0-4万）的书在训练中出现很少，但测试答案里大量出现。这可能是有用的信号。
+  </p>
+  <div class="card">
+    <div class="card-title">物品ID区间分布：训练集 vs 测试答案（已知/神秘）</div>
+    <div class="chart-wrap tall"><canvas id="chartIdRange"></canvas></div>
+    <div class="insight-box warn" style="margin-top:12px">
+      <p>
+        <strong>编号0-2万和2万-4万</strong>：训练中很少出现（分别5802本、1894本），但神秘答案大量集中在这里（19485本、25050本）。<br>
+        这提示：<strong>低编号可能是特定类别或新上架的书</strong>，AI需要学会对这些书做出有根据的猜测。
+      </p>
+    </div>
+  </div>
+</div>
+
+<hr class="sep">
+
+<!-- Section 6: 多邻居 -->
+<div class="section">
+  <div class="section-title">🛒 购物车行为：很多人一天买好几本<span class="tag info">序列分析</span></div>
+  <p class="section-desc">
+    接近一半（49.7%）的情况下，用户在同一天买了不止一本书。这说明很多购买是"一起下单"的，有成批购买的模式。
+  </p>
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-title">同一天购书数量分布（前8档）</div>
+      <div class="chart-wrap tall"><canvas id="chartMulti"></canvas></div>
+      <div class="insight-box ok" style="margin-top:12px">
+        <p>买1本：39.6万次，买2本：16.3万次，买3本：7.9万次……最多一次买了4171本！</p>
+      </div>
+    </div>
+    <div class="card" style="display:flex; flex-direction:column; justify-content:center; padding: 30px;">
+      <div style="font-size:13px; color:#8892b0; line-height:2; margin-bottom:20px;">
+        <div style="margin-bottom:12px; font-size:15px; color:#c0cae0; font-weight:600;">🏆 用户规模概览</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+          <div style="background:#232840;border-radius:8px;padding:14px;">
+            <div style="font-size:22px;color:#4f7ef7;font-weight:700;">12,708</div>
+            <div style="font-size:12px;color:#8892b0;margin-top:4px;">总用户数</div>
+          </div>
+          <div style="background:#232840;border-radius:8px;padding:14px;">
+            <div style="font-size:22px;color:#4fcfa0;font-weight:700;">2,180</div>
+            <div style="font-size:12px;color:#8892b0;margin-top:4px;">测试用户数（无新用户）</div>
+          </div>
+          <div style="background:#232840;border-radius:8px;padding:14px;">
+            <div style="font-size:22px;color:#f7c94f;font-weight:700;">14次</div>
+            <div style="font-size:12px;color:#8892b0;margin-top:4px;">用户中位数购书量</div>
+          </div>
+          <div style="background:#232840;border-radius:8px;padding:14px;">
+            <div style="font-size:22px;color:#f7724f;font-weight:700;">12,574次</div>
+            <div style="font-size:12px;color:#8892b0;margin-top:4px;">最多购书（土豪用户）</div>
+          </div>
+          <div style="background:#232840;border-radius:8px;padding:14px;">
+            <div style="font-size:22px;color:#a07ef7;font-weight:700;">97.2%</div>
+            <div style="font-size:12px;color:#8892b0;margin-top:4px;">购买新书率（不重复买）</div>
+          </div>
+          <div style="background:#232840;border-radius:8px;padding:14px;">
+            <div style="font-size:22px;color:#f77ea0;font-weight:700;">2.2%</div>
+            <div style="font-size:12px;color:#8892b0;margin-top:4px;">重复购买同一本书</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="sep">
+
+<!-- Section 7: 改进方向 -->
+<div class="section">
+  <div class="section-title">🚀 改进方向总结<span class="tag ok">行动建议</span></div>
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-title" style="color:#f7724f">🔴 最紧迫：修复自测题</div>
+      <p style="font-size:13px;color:#8892b0;line-height:1.8;">
+        现在用的"自测题"（split-1验证集）没有任何神秘书，分数虚高。<br><br>
+        <strong style="color:#fff">怎么修：</strong>在验证集里人为加入50%神秘书候选，让自测难度和真实考试一样。<br><br>
+        <strong style="color:#4fcfa0">预期效果：</strong>能真实反映模型在比赛中的水平，不再被虚高分数误导。
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-title" style="color:#f7724f">🔴 最紧迫：给神秘书造"估计的脸"</div>
+      <p style="font-size:13px;color:#8892b0;line-height:1.8;">
+        神秘书（从未出现在训练中）的"打分依据"是随机的，AI无法区分。<br><br>
+        <strong style="color:#fff">怎么修：</strong>把书的编号拆成大类、中类、小类，让同类书共享部分"脸"的特征（ID分解嵌入）。<br><br>
+        <strong style="color:#4fcfa0">预期效果：</strong>神秘书也能得到有意义的初始打分，不再是纯随机。
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-title" style="color:#f7c94f">🟡 有效：去掉热门偏见</div>
+      <p style="font-size:13px;color:#8892b0;line-height:1.8;">
+        AI喜欢给热门书打高分，但热门书不一定是用户下一步要买的。<br><br>
+        <strong style="color:#fff">怎么修：</strong>给每本书的分数减去"它有多热门"这个因素（公式：得分 - 0.5 × 热度）。<br><br>
+        <strong style="color:#4fcfa0">本地自测效果：</strong>MRR从0.073提升至0.577（提升约8倍）。
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-title" style="color:#f7c94f">🟡 有效：用考试题练习</div>
+      <p style="font-size:13px;color:#8892b0;line-height:1.8;">
+        测试里99个干扰选项（c2~c100）虽然不知道哪个是答案，但它们本身就是很好的"难题负样本"。<br><br>
+        <strong style="color:#fff">怎么修：</strong>把这99个干扰选项加入训练，让AI学会在同等难度的对手里做出区分。<br><br>
+        <strong style="color:#4fcfa0">预期效果：</strong>训练分布更接近真实测试，泛化能力增强。
+      </p>
+    </div>
+  </div>
+</div>
+
+<div style="text-align:center; padding:24px; color:#4a5568; font-size:12px;">
+  Dataset2 EDA · 数据时间：2000-04 ~ 2012-01 · 分析时间：2026-06-06
+</div>
+
+<script>
+// ── 颜色主题 ──────────────────────────────
+const C = {
+  blue:   '#4f7ef7', lightBlue: '#7fa8ff',
+  green:  '#4fcfa0', lightGreen:'#7ff0c0',
+  orange: '#f7724f', lightOrange:'#ffa080',
+  yellow: '#f7c94f', purple: '#a07ef7',
+  gray:   '#4a556888', grid: '#232840',
+};
+Chart.defaults.color = '#8892b0';
+Chart.defaults.borderColor = '#232840';
+const font = { family: "'PingFang SC','Microsoft YaHei',sans-serif", size: 11 };
+
+// ── 工具函数 ────────────────────────────────
+function baseOpts(title) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { font, boxWidth: 12, padding: 12 } },
+      title: title ? { display: false } : undefined,
+      tooltip: { titleFont: font, bodyFont: font },
+    },
+    scales: {
+      x: { ticks: { font, maxRotation: 45 }, grid: { color: C.grid } },
+      y: { ticks: { font }, grid: { color: C.grid } },
+    },
+  };
+}
+
+// ── 1. 冷启动饼图 ────────────────────────────
+new Chart(document.getElementById('chartColdKnown'), {
+  type: 'doughnut',
+  data: {
+    labels: ['神秘书（冷启动）', '已知书'],
+    datasets: [{
+      data: [82139, 71281],
+      backgroundColor: [C.orange, C.blue],
+      borderWidth: 2, borderColor: '#1a1f35',
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    cutout: '60%',
+    plugins: {
+      legend: { position: 'bottom', labels: { font, padding: 12 } },
+      tooltip: {
+        callbacks: {
+          label: ctx => ` ${ctx.label}: ${ctx.raw.toLocaleString()}条 (${(ctx.raw/153420*100).toFixed(1)}%)`,
+        }
+      }
+    }
+  }
+});
+
+// ── 2. 候选构成饼图 ─────────────────────────
+new Chart(document.getElementById('chartCandComp'), {
+  type: 'doughnut',
+  data: {
+    labels: ['神秘书候选 (~54本)', '已知书候选 (~46本)'],
+    datasets: [{
+      data: [53.6, 46.4],
+      backgroundColor: [C.orange + 'cc', C.blue + 'cc'],
+      borderWidth: 2, borderColor: '#1a1f35',
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    cutout: '60%',
+    plugins: {
+      legend: { position: 'bottom', labels: { font, padding: 12 } },
+      tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw}%` } }
+    }
+  }
+});
+
+// ── 3. 得分分布对比 ─────────────────────────
+{
+  const labels = ["0.25","0.28","0.30","0.33","0.35","0.38","0.40","0.43","0.45","0.47","0.50","0.53","0.55","0.57","0.60","0.62","0.65","0.68","0.70","0.73"];
+  const known  = [78,629,3874,17681,63163,174545,386836,688871,1007806,1216535,1215703,1006410,688570,386639,175528,64119,17921,3892,647,72];
+  const cold   = [80,624,4329,19837,72626,201310,445501,796264,1164431,1407244,1408144,1164208,794140,443376,201607,73024,20493,4324,698,63];
+  // normalize
+  const ksum = known.reduce((a,b)=>a+b,0), csum = cold.reduce((a,b)=>a+b,0);
+  new Chart(document.getElementById('chartScoreDist'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label:'已知书得分', data: known.map(v=>v/ksum*100), borderColor: C.blue, backgroundColor: C.blue+'22', fill:true, tension:0.4, pointRadius:0, borderWidth:2 },
+        { label:'神秘书得分', data: cold.map(v=>v/csum*100),  borderColor: C.orange, backgroundColor: C.orange+'22', fill:true, tension:0.4, pointRadius:0, borderWidth:2 },
+      ]
+    },
+    options: {
+      ...baseOpts(),
+      scales: {
+        x: { ticks: { font, maxRotation:45 }, grid: { color: C.grid } },
+        y: { ticks: { font, callback: v=>v.toFixed(1)+'%' }, grid: { color: C.grid } },
+      }
+    }
+  });
+}
+
+// ── 4. 月度交互量 ────────────────────────────
+{
+  const monthly = {"2000-04":55,"2000-05":269,"2000-06":510,"2000-07":226,"2000-08":357,"2000-09":468,"2000-10":458,"2000-11":1063,"2000-12":980,"2001-01":625,"2001-02":672,"2001-03":861,"2001-04":1314,"2001-05":1345,"2001-06":1555,"2001-07":1585,"2001-08":3046,"2001-09":3300,"2001-10":3522,"2001-11":3714,"2001-12":3443,"2002-01":4152,"2002-02":6066,"2002-03":6135,"2002-04":5673,"2002-05":5651,"2002-06":6179,"2002-07":9006,"2002-08":8284,"2002-09":8638,"2002-10":8762,"2002-11":9245,"2002-12":11765,"2003-01":11503,"2003-02":7673,"2003-03":9073,"2003-04":6252,"2003-05":8466,"2003-06":8584,"2003-07":11092,"2003-08":10837,"2003-09":8824,"2003-10":10050,"2003-11":10552,"2003-12":12083,"2004-01":12449,"2004-02":11470,"2004-03":11882,"2004-04":12917,"2004-05":13996,"2004-06":14820,"2004-07":14911,"2004-08":15061,"2004-09":13075,"2004-10":15454,"2004-11":14871,"2004-12":16014,"2005-01":15236,"2005-02":14374,"2005-03":18086,"2005-04":15959,"2005-05":16726,"2005-06":17333,"2005-07":19276,"2005-08":19629,"2005-09":16752,"2005-10":20603,"2005-11":17767,"2005-12":21648,"2006-01":21956,"2006-02":19497,"2006-03":21242,"2006-04":19108,"2006-05":22454,"2006-06":20565,"2006-07":21179,"2006-08":23022,"2006-09":21271,"2006-10":22777,"2006-11":22852,"2006-12":23800,"2007-01":25348,"2007-02":24051,"2007-03":25702,"2007-04":26537,"2007-05":28671,"2007-06":26794,"2007-07":31202,"2007-08":29875,"2007-09":34557,"2007-10":31176,"2007-11":28528,"2007-12":32481,"2008-01":31890,"2008-02":30058,"2008-03":34554,"2008-04":33837,"2008-05":36541,"2008-06":32698,"2008-07":33081,"2008-08":38473,"2008-09":31761,"2008-10":33180,"2008-11":17686,"2008-12":29131,"2009-01":33266,"2009-02":29516,"2009-03":34674,"2009-04":31059,"2009-05":32944,"2009-06":32421,"2009-07":36563,"2009-08":37402,"2009-09":33307,"2009-10":33050,"2009-11":32077,"2009-12":30339,"2010-01":28695,"2010-02":23854,"2010-03":24729,"2010-04":21996,"2010-05":20226,"2010-06":19818,"2010-07":20558,"2010-08":21376,"2010-09":17434,"2010-10":17075,"2010-11":15760,"2010-12":16139,"2011-01":15248};
+  const keys = Object.keys(monthly);
+  // show every 6th label
+  const tickLabels = keys.map((k,i) => i%6===0 ? k : '');
+  new Chart(document.getElementById('chartMonthly'), {
+    type: 'line',
+    data: {
+      labels: keys,
+      datasets: [{
+        label:'月度交互量',
+        data: Object.values(monthly),
+        borderColor: C.blue, backgroundColor: C.blue+'33',
+        fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font, callback: (_,i) => tickLabels[i] || '', maxRotation:45 }, grid: { color: C.grid } },
+        y: { ticks: { font, callback: v => v>=1000 ? (v/1000).toFixed(0)+'k' : v }, grid: { color: C.grid } },
+      },
+      annotation: {}
+    }
+  });
+}
+
+// ── 5. 时间间隔 ──────────────────────────────
+new Chart(document.getElementById('chartGap'), {
+  type: 'bar',
+  data: {
+    labels: ['0-1月','1-2月','2-3月','3-6月','6-12月','1-2年','2年以上'],
+    datasets: [{
+      label:'查询数量',
+      data: [10919,12853,12753,36965,67442,8885,3603],
+      backgroundColor: [C.green,C.green,C.yellow,C.yellow,C.orange,C.orange+'99',C.orange+'66'],
+    }]
+  },
+  options: {
+    ...baseOpts(),
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { font }, grid: { color: C.grid } },
+      y: { ticks: { font, callback: v=>v>=1000?(v/1000).toFixed(0)+'k':v }, grid: { color: C.grid } },
+    }
+  }
+});
+
+// ── 6. 用户度分布 ────────────────────────────
+new Chart(document.getElementById('chartSrcDeg'), {
+  type: 'bar',
+  data: {
+    labels: ['1-5本','6-10','11-20','21-50','51-100','101-200','201-500','501-1000','1001-5000','5000+'],
+    datasets: [{
+      label:'用户数',
+      data: [3345,2164,1709,1511,920,992,941,518,589,19],
+      backgroundColor: C.blue+'cc', borderRadius: 4,
+    }]
+  },
+  options: {
+    ...baseOpts(),
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { font, maxRotation:45 }, grid: { color: C.grid } },
+      y: { ticks: { font }, grid: { color: C.grid } },
+    }
+  }
+});
+
+// ── 7. 物品度分布 ────────────────────────────
+new Chart(document.getElementById('chartDstDeg'), {
+  type: 'bar',
+  data: {
+    labels: ['1-5次','6-10','11-20','21-50','51-100','101-200','201-500','501-1000','1001-5000','5000+'],
+    datasets: [{
+      label:'书的数量',
+      data: [13809,11566,9770,8027,3238,1888,1523,575,244,0],
+      backgroundColor: C.green+'cc', borderRadius: 4,
+    }]
+  },
+  options: {
+    ...baseOpts(),
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { font, maxRotation:45 }, grid: { color: C.grid } },
+      y: { ticks: { font, callback: v=>v>=1000?(v/1000).toFixed(0)+'k':v }, grid: { color: C.grid } },
+    }
+  }
+});
+
+// ── 8. ID范围分布 ────────────────────────────
+new Chart(document.getElementById('chartIdRange'), {
+  type: 'bar',
+  data: {
+    labels: ['0-2万','2万-4万','4万-6万','6万-8万','8万-10万','10万-12万'],
+    datasets: [
+      { label:'训练集（出现过的书）', data:[5802,1894,10991,13691,12270,5992], backgroundColor: C.blue+'bb', borderRadius:3 },
+      { label:'测试答案-已知书',      data:[8344,2692,15280,19292,17336,8337], backgroundColor: C.green+'bb', borderRadius:3 },
+      { label:'测试答案-神秘书',      data:[19485,25050,12512,8554,10634,5904], backgroundColor: C.orange+'bb', borderRadius:3 },
+    ]
+  },
+  options: {
+    ...baseOpts(),
+    scales: {
+      x: { ticks: { font }, grid: { color: C.grid } },
+      y: { ticks: { font, callback: v=>v>=1000?(v/1000).toFixed(0)+'k':v }, grid: { color: C.grid } },
+    }
+  }
+});
+
+// ── 9. 多邻居分布 ────────────────────────────
+new Chart(document.getElementById('chartMulti'), {
+  type: 'bar',
+  data: {
+    labels: ['1本','2本','3本','4本','5本','6本','7本','8本'],
+    datasets: [{
+      label:'(用户,日期)组数',
+      data: [395848,162697,78533,43084,26429,17735,12303,9121],
+      backgroundColor: [C.blue,C.green,C.yellow,C.orange,C.purple,C.blue+'99',C.green+'99',C.yellow+'99'],
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    ...baseOpts(),
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { font }, grid: { color: C.grid } },
+      y: { ticks: { font, callback: v=>v>=1000?(v/1000).toFixed(0)+'k':v }, grid: { color: C.grid } },
+    }
+  }
+});
+</script>
+</body>
+</html>
