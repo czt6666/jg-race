@@ -103,7 +103,12 @@
 
 <div class="header">
   <h1>📚 Dataset2 数据分析可视化</h1>
-  <p>226万条购书记录 · 12,708位用户 · 50,640本书 · 训练期：2000-2011 · 测试期：2011-2012</p>
+  <p>任务：时序图未来链接预测（Temporal Link Prediction）· 推测类型：电商推荐图（疑似 Amazon 评论）</p>
+  <p style="margin-top:6px;">226万条购买/评论记录 · 12,708位用户 · 50,640件商品 · 训练期：2000-2011 · 测试期：2011-2012</p>
+  <div style="margin-top:10px;">
+    <span style="display:inline-block;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:600;background:#4fcfa022;color:#4fcfa0;border:1px solid #4fcfa044;margin-right:8px;">竞赛真实 MRR = 0.68（SASRec+WD）</span>
+    <span style="display:inline-block;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:600;background:#f7724f22;color:#ffa080;border:1px solid #f7724f44;">c1 不是固定正样本，正样本随机分布在 c1~c100</span>
+  </div>
 </div>
 
 <!-- KPI Bar -->
@@ -123,15 +128,15 @@
     <div class="lbl">答案是"神秘书"</div>
     <div class="sub">训练中从未出现过</div>
   </div>
-  <div class="kpi warn">
-    <div class="val">0.052</div>
-    <div class="lbl">真实测试 MRR</div>
-    <div class="sub">接近随机猜（0.01）</div>
-  </div>
   <div class="kpi ok">
+    <div class="val">0.68</div>
+    <div class="lbl">竞赛真实 MRR</div>
+    <div class="sub">SASRec+WD 提交成绩</div>
+  </div>
+  <div class="kpi note">
     <div class="val">0.525</div>
-    <div class="lbl">本地自测 MRR</div>
-    <div class="sub">但与真实考试脱节</div>
+    <div class="lbl">本地验证 MRR</div>
+    <div class="sub">低于真实（无冷启动val）</div>
   </div>
   <div class="kpi note">
     <div class="val">220天</div>
@@ -140,30 +145,32 @@
   </div>
 </div>
 
-<!-- Section 1: 核心问题 -->
+<!-- Section 1: 任务说明 + 核心发现 -->
 <div class="section">
-  <div class="section-title">⚠️ 核心问题：自测和真实考试为什么差距这么大？<span class="tag">关键发现</span></div>
+  <div class="section-title">🎯 任务说明：时序图未来链接预测<span class="tag info">任务定义</span></div>
   <p class="section-desc">
-    AI模型本地自测得了 <strong style="color:#4fcfa0">0.525分</strong>（约第2名），但真实测试只有 <strong style="color:#f7724f">0.052分</strong>（约第19名）。<br>
-    原因：自测题全是"学过的书"，真实考试有53.5%的答案是没学过的"神秘书"。
+    <strong style="color:#fff">赛题任务：</strong>"本赛题聚焦时序图中的未来链接预测任务。给定用户、物品、作者、网页等实体在历史上的交互序列……"<br>
+    <strong style="color:#fff">白话解释：</strong>给出某用户的历史购买序列，以及100个候选商品，猜出正确答案排第几名（100-way MRR）。<br>
+    <strong style="color:#fff">Dataset2 推测类型：</strong>电商购买/评论图（时间跨度、商品规模、日级时间戳高度匹配 Amazon 评论数据集）。<br>
+    <strong style="color:#fff">重要说明：</strong>c1 不是固定正样本，正样本随机分布在 c1~c100 任意位置。
   </p>
 
+  <div class="section-title" style="margin-top:8px;">📊 各方法 MRR 对比<span class="tag">核心指标</span></div>
   <div class="alert-big">
-    <h3>🚨 致命陷阱：本地验证集和真实测试集完全不一样</h3>
+    <h3>💡 本地验证(0.525) vs 竞赛真实(0.68)：真实比本地高！</h3>
     <p>
-      本地自测（split-1验证集）：答案 100% 是训练中出现过的书，负样本随机选取 → AI能认出答案，得高分 ✓<br>
-      真实测试集：答案 53.5% 是从未出现的神秘书，负样本精心构造与答案难度相同 → AI完全分不清 ✗<br><br>
-      <strong>结论：我们一直用"简单模拟题"来评估AI，但真正的考试是"难题"。</strong>
+      本地验证（split-1）：候选全是已知商品，负样本随机 → 容易区分，MRR=0.525<br>
+      竞赛真实测试：~54个候选是神秘商品（得分≈0.5），~46个是已知商品 → 神秘商品竞争力弱，反而帮助正样本脱颖而出 → MRR=<strong>0.68</strong><br><br>
+      <strong>冷启动的"反直觉优势"：神秘商品分数固定约0.5，无法击败训练充分的已知正样本。</strong>
     </p>
   </div>
 
-  <!-- MRR对比 -->
   <div class="card">
-    <div class="card-title">各方法 MRR 得分对比（满分=1.0，相当于每次都猜第1名）</div>
+    <div class="card-title">各方法 MRR 得分对比（满分=1.0）</div>
     <div style="padding: 8px 0;">
       <div class="mrr-row">
-        <div class="mrr-label">随机猜测（基准线）</div>
-        <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:1%;background:#555">0.010</div></div>
+        <div class="mrr-label">随机猜测（理论下限）</div>
+        <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:1%;background:#555"></div></div>
         <div class="mrr-val" style="color:#888">0.010</div>
       </div>
       <div class="mrr-row">
@@ -172,28 +179,20 @@
         <div class="mrr-val" style="color:#f7c94f">0.056</div>
       </div>
       <div class="mrr-row">
-        <div class="mrr-label">SASRec AI（真实测试）</div>
-        <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:5.18%;background:#7c3030">0.052</div></div>
-        <div class="mrr-val" style="color:#f7724f">0.052</div>
+        <div class="mrr-label">SASRec（本地验证 split-1）</div>
+        <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:52.5%;background:#2a5b7a">0.525</div></div>
+        <div class="mrr-val" style="color:#7fa8ff">0.525</div>
       </div>
       <div class="mrr-row">
-        <div class="mrr-label">SASRec inbatch（真实测试）</div>
-        <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:5.22%;background:#7c3040">0.052</div></div>
-        <div class="mrr-val" style="color:#f7724f">0.052</div>
+        <div class="mrr-label">SASRec + 去热度偏差（本地验证）</div>
+        <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:57.65%;background:#2a6b8a">0.577</div></div>
+        <div class="mrr-val" style="color:#7fa8ff">0.577</div>
       </div>
       <div class="mrr-row">
-        <div class="mrr-label">SASRec AI（本地自测）</div>
-        <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:52.5%;background:#2a6b4f">0.525</div></div>
-        <div class="mrr-val" style="color:#4fcfa0">0.525</div>
+        <div class="mrr-label">SASRec+WD（竞赛真实提交）🏆</div>
+        <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:68%;background:#1a7a5a">0.680</div></div>
+        <div class="mrr-val" style="color:#4fcfa0">0.680</div>
       </div>
-      <div class="mrr-row">
-        <div class="mrr-label">SASRec + 去热度偏差（本地自测）</div>
-        <div class="mrr-bar-wrap"><div class="mrr-bar" style="width:57.65%;background:#1a7a5a">0.577</div></div>
-        <div class="mrr-val" style="color:#4fcfa0">0.577</div>
-      </div>
-    </div>
-    <div class="insight-box warn" style="margin-top:12px">
-      <p>📝 <strong>大白话解释：</strong>真实测试中AI和「随机猜」几乎一样差。去热度偏差能大幅改善本地自测，但对真实测试的效果还需验证。</p>
     </div>
   </div>
 </div>
@@ -202,30 +201,30 @@
 
 <!-- Section 2: 冷启动 -->
 <div class="section">
-  <div class="section-title">❄️ 冷启动问题：神秘书占了一半多<span class="tag">核心难点</span></div>
+  <div class="section-title">❄️ 冷启动问题：100个候选中约54个是神秘商品<span class="tag">核心难点</span></div>
   <p class="section-desc">
-    "冷启动"= AI 没见过这本书，不知道它是什么，无法给它打分。测试里超过一半的正确答案都是这种"神秘书"。
+    "冷启动"= AI 没见过这件商品，无法给它打分，只能给出随机得分（≈0.5）。每条测试查询的100个候选中，约有54个是这种神秘商品，正样本也可能是其中之一。正样本随机分布在 c1~c100 中，不固定在 c1。
   </p>
   <div class="grid grid-3">
     <div class="card">
-      <div class="card-title">测试答案（c1）：已知 vs 神秘</div>
+      <div class="card-title">100个候选整体构成（非c1特指）</div>
       <div class="chart-wrap"><canvas id="chartColdKnown"></canvas></div>
       <div class="insight-box" style="margin-top:12px">
-        <p>53.5% 的答案是训练中从未出现过的书——AI看到后完全懵了。</p>
+        <p>所有测试候选中，46.4% 是训练见过的商品，53.6% 是神秘商品。正样本随机落在任一列。</p>
       </div>
     </div>
     <div class="card">
-      <div class="card-title">100个候选中：已知 vs 神秘构成</div>
+      <div class="card-title">每条查询的100候选构成（均值）</div>
       <div class="chart-wrap"><canvas id="chartCandComp"></canvas></div>
       <div class="insight-box" style="margin-top:12px">
-        <p>不管答案是已知还是神秘，100个候选里神秘书都有~54本，已知书~46本。</p>
+        <p>每条查询平均：约46个已知商品 + 约54个神秘商品。神秘商品得分固定≈0.5，与已知商品混在一起。</p>
       </div>
     </div>
     <div class="card">
-      <div class="card-title">AI给书的打分（神秘书 vs 已知书）</div>
+      <div class="card-title">AI得分分布（神秘 vs 已知商品）</div>
       <div class="chart-wrap"><canvas id="chartScoreDist"></canvas></div>
       <div class="insight-box" style="margin-top:12px">
-        <p>神秘书（橙色）和已知书（蓝色）的得分分布几乎完全重叠 → AI完全分不清。</p>
+        <p>神秘商品（橙）分布集中在0.5；已知商品（蓝）分布稍宽。两者高度重叠 → AI难以区分，但正样本（已知商品时）有优势。</p>
       </div>
     </div>
   </div>

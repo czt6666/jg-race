@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dataset1 数据分析可视化</title>
+<title>Dataset1 数据分析可视化 | 时序图链接预测</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -105,8 +105,9 @@
 
 <div class="header">
   <h1>🌐 Dataset1 数据分析可视化</h1>
-  <p>69万条社交互动记录 · 23,852个节点 · 同构图（人→人）· 时间粒度：秒级</p>
-  <span class="badge">竞赛真实 MRR = 0.44</span>
+  <p>任务：时序图未来链接预测（Temporal Link Prediction）· 推测类型：社交网络 / 社区互动图</p>
+  <p style="margin-top:6px;">69万条互动记录 · 23,852个节点 · 同构图（人→人）· 时间粒度：秒级</p>
+  <span class="badge">竞赛真实 MRR = 0.44（SASRec+WD）</span>
   <span class="badge warn">c1 不是固定正样本，正样本随机分布在 c1~c100</span>
 </div>
 
@@ -143,10 +144,16 @@
   </div>
 </div>
 
-<!-- Section 0: 重要说明 -->
+<!-- Section 0: 任务说明 + 重要说明 -->
 <div class="section">
-  <div class="section-title">📌 重要说明：正样本位置是随机的<span class="tag">关键更正</span></div>
-  <p class="section-desc">之前的分析曾误以为 c1 始终是正样本（正确答案）。实际上，正样本被竞赛方随机打散在 c1~c100 任意位置，服务器在我们提交分数后才对照正确位置计算 MRR。</p>
+  <div class="section-title">🎯 任务说明：时序图未来链接预测<span class="tag info">任务定义</span></div>
+  <p class="section-desc">
+    <strong style="color:#fff">赛题任务：</strong>"本赛题聚焦时序图中的未来链接预测任务。给定用户、物品、作者、网页等实体在历史上的交互序列……"<br>
+    <strong style="color:#fff">白话解释：</strong>给出某个节点在历史中的互动记录，以及100个候选节点，猜出下一个真实互动对象排在第几名（100-way MRR）。<br>
+    <strong style="color:#fff">Dataset1 推测类型：</strong>社交网络 / 社区互动图（类似 Reddit 评论、Wikipedia 编辑者交互、邮件/论坛网络）。
+  </p>
+  <div class="section-title" style="margin-top:16px;">📌 重要说明：正样本位置是随机的<span class="tag">关键更正</span></div>
+  <p class="section-desc">正样本被竞赛方随机打散在 c1~c100 任意位置，服务器在我们提交分数后才对照正确位置计算 MRR。c1 列不代表任何特殊含义。</p>
   <div class="grid grid-2">
     <div class="card">
       <div class="card-title">Dataset1 vs Dataset2 竞赛真实 MRR 对比</div>
