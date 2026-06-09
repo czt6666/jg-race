@@ -133,7 +133,12 @@ class DyGFormerRecency(DyGFormer):
         tau = 86400 * 30  # 30 days in seconds
         recency = np.stack([
             np.exp(-delta_t / tau),
-            1.0 / np.log1p(delta_t / 3600.0),
+            # Bounded recency weight in (0, 1]: 1 when delta_t -> 0, decaying for
+            # older neighbors. The previous form 1/log1p(delta_t/3600) was
+            # unbounded (->3.6e9 at delta_t=1e-6, 3600 at delta_t=1s), which
+            # saturated the edge projection and collapsed eval outputs to a
+            # constant (AUC=0.5).
+            1.0 / (1.0 + np.log1p(delta_t / 3600.0)),
         ], axis=-1).astype(np.float32)  # shape: (batch_size, max_seq_length, 2)
 
         # 3. Zero-out padding positions (neighbor_id == 0).

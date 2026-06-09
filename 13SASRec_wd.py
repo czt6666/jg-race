@@ -44,6 +44,11 @@ def log(msg):
         print(msg, flush=True)
 
 
+# 全词表 softmax 开关（在 main 中根据 --loss 设置）
+USE_FULL_SOFTMAX = False
+SOFTMAX_TAU = 0.07
+
+
 # ============================================================
 # 用户交互历史构建（高效二分查找）
 # ============================================================
@@ -150,6 +155,40 @@ class PopNegSampler:
             result[i * K:(i + 1) * K] = cands[:K]
 
         return result
+
+
+class TestPoolNegSampler:
+    """从【测试候选池】采负样本（含冷物品），让训练负样本分布≈测试负样本。
+    目的：让模型学会把冷/无关物品压低分（它们占测试负样本54%）。
+    向量化采样：一次性为整批抽候选，过滤掉=正样本的，速度快。"""
+    def __init__(self, test_candidates, p_uniform=0.2, seed=42):
+        self._rng = np.random.RandomState(seed)
+        flat = test_candidates.reshape(-1).astype(np.int64)
+        vals, cnts = np.unique(flat, return_counts=True)
+        self.pool = vals.astype(np.int32)
+        w = np.sqrt(cnts.astype(np.float64))  # 频率开方加权（≈测试候选边际分布）
+        self.pool_probs = w / w.sum()
+        self.p_uniform = p_uniform
+        self.n_pool = len(self.pool)
+
+    def sample(self, src, dst, K):
+        B = len(src)
+        need = B * K
+        n_uni = int(need * self.p_uniform)
+        n_pool = need - n_uni
+        # 大部分按测试候选频率采，少部分均匀采（覆盖长尾）
+        a = self._rng.choice(self.pool, size=n_pool, p=self.pool_probs, replace=True)
+        b = self._rng.choice(self.pool, size=n_uni, replace=True)  # 池内均匀
+        cand = np.concatenate([a, b])
+        self._rng.shuffle(cand)
+        cand = cand.reshape(B, K).astype(np.int32)
+        # 把恰好=正样本的替换掉（少量，按位修正）
+        dst_arr = np.asarray(dst, dtype=np.int32).reshape(B, 1)
+        clash = cand == dst_arr
+        if clash.any():
+            fix = self._rng.choice(self.pool, size=int(clash.sum()), replace=True).astype(np.int32)
+            cand[clash] = fix
+        return cand.reshape(-1)
 
 
 # ============================================================
@@ -278,6 +317,22 @@ def train(backbone, optimizer, train_loader, val_loader, neg_sampler, K,
                 jt.Var(item_seq).int32(),
                 jt.Var(item_seq_len).int32()
             )  # [B, H]
+
+            if USE_FULL_SOFTMAX:
+                # 全词表 sampled-softmax：对所有物品算 logits，正样本=dst
+                # logits[B, n_items] = user_repr @ W^T ; W=item_embedding.weight
+                W = backbone.item_embedding.weight  # [n_items+1, H]
+                logits = jt.matmul(user_repr, W.transpose(0, 1)) / SOFTMAX_TAU  # [B, V]
+                loss = jt.nn.cross_entropy_loss(logits, jt.Var(dst).int32())
+                optimizer.zero_grad()
+                optimizer.step(loss)
+                jt.sync_all()
+                losses.append(loss.item())
+                pbar.set_description(f"Epoch {epoch + 1} loss={loss.item():.4f}")
+                del user_repr, W, logits
+                if (batch_idx + 1) % 16 == 0:
+                    jt.gc()
+                continue
 
             # 正样本得分 [B]
             pos_embs = backbone.item_embedding(jt.Var(dst).int32())
@@ -463,6 +518,11 @@ parser.add_argument("--weight_decay", type=float, default=1e-4, help="L2 weight 
 parser.add_argument("--num_neg", type=int, default=15,
                     help="InfoNCE 负样本数，默认15（16-way训练）")
 parser.add_argument("--p_pop", type=float, default=0.7)
+parser.add_argument("--neg_source", type=str, default="train", choices=["train", "test_pool"],
+                    help="负样本来源：train=PopNegSampler(训练集), test_pool=从测试候选池采(含冷物品)")
+parser.add_argument("--loss", type=str, default="infonce", choices=["infonce", "fullsoftmax"],
+                    help="infonce=K负样本; fullsoftmax=全词表softmax(对所有物品)")
+parser.add_argument("--softmax_tau", type=float, default=0.07, help="fullsoftmax 温度")
 parser.add_argument("--use_all_train", action="store_true",
                     help="用全量 train.csv 训练（不留 val）")
 parser.add_argument("--eval_only", action="store_true")
@@ -576,7 +636,16 @@ if args.resume_path and not args.eval_only:
     log(f"Resumed weights from: {args.resume_path}")
 
 if not args.eval_only:
-    neg_sampler = PopNegSampler(train_df, p_pop=args.p_pop)
+    USE_FULL_SOFTMAX = (args.loss == "fullsoftmax")
+    SOFTMAX_TAU = args.softmax_tau
+    if USE_FULL_SOFTMAX:
+        log(f"LOSS: full-vocab softmax (tau={SOFTMAX_TAU}, V={max_item_id+1})")
+    if args.neg_source == "test_pool":
+        neg_sampler = TestPoolNegSampler(test_candidates)
+        log("NegSampler: TestPoolNegSampler (负样本来自测试候选池，含冷物品)")
+    else:
+        neg_sampler = PopNegSampler(train_df, p_pop=args.p_pop)
+        log("NegSampler: PopNegSampler (训练集流行度加权)")
     optimizer = jt.nn.Adam(list(backbone.parameters()), lr=args.lr, weight_decay=args.weight_decay)
     log(f"\nInfoNCE training: K={args.num_neg}, "
         f"simulating {args.num_neg + 1}-way ranking")

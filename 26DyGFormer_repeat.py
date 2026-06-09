@@ -688,6 +688,7 @@ full_data = TemporalData(
 # =============================================================================
 # Insert repeat edge feature enhancement after full_data is built
 # =============================================================================
+num_edges = len(df)
 log("Computing repeat edge features...")
 base_edge_feat = np.zeros((num_edges, args.edge_feat_dim - 4), dtype=np.float32)
 enhanced_edge_feat = add_repeat_edge_features(src_np, dst_np, t_np, base_edge_feat)
